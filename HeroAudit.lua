@@ -204,6 +204,16 @@ local heroAuditStyles = {
         bgcolor = MUTED,
     },
     {
+        selectors = {"heroaudit-row-gearicon"},
+        width = 16,
+        height = 16,
+        halign = "left",
+        valign = "center",
+        hmargin = 4,
+        bgimage = "ui-icons/inventory.png",
+        bgcolor = MUTED,
+    },
+    {
         selectors = {"heroaudit-names-list"},
         width = "100%-24",
         height = "auto",
@@ -468,6 +478,26 @@ function HeroAudit.BuildClassStatus(hero)
     return status, classItem.name
 end
 
+--- Return the alphabetically-sorted names of every subclass currently
+--- assigned to the hero. Uses the same primary-vs-subclass convention as
+--- the Character Builder: entry 1 of GetClassesAndSubClasses is the primary
+--- class, entries 2+ are subclasses.
+--- @param hero character The hero to audit.
+--- @return table names Array of subclass names; empty when the hero has no class or no subclasses.
+function HeroAudit.GetSubclassNames(hero)
+    local names = {}
+    if hero:GetClass() == nil then return names end
+
+    local entries = hero:GetClassesAndSubClasses() or {}
+    for i, entry in ipairs(entries) do
+        if i ~= 1 and entry.class then
+            names[#names + 1] = string.gsub(entry.class.name, " Domain", "")
+        end
+    end
+    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
+    return names
+end
+
 --- Return how many kits the hero's class grants and the names of any kits selected.
 --- @param hero character The hero to audit.
 --- @return number numKits Number of kit slots (0 when the class grants none or the hero cannot have kits).
@@ -578,6 +608,29 @@ function HeroAudit.GetAspectNames(hero)
     return names
 end
 
+--- Return the alphabetically-sorted names of every piece of gear the hero
+--- currently has equipped. Equipment lives on the character as a keyed table
+--- `equipment = { [slotName] = gearGuid, ... }`, with a `_luaTable` marker
+--- that must be skipped. Each GUID resolves through the caller-provided gear
+--- table so the dmhub lookup only happens once per dialog.
+--- @param hero character The hero to audit.
+--- @param gearTable table The cached `tbl_Gear` table (guid → gear item).
+--- @return table names Array of gear names, possibly empty.
+function HeroAudit.GetEquippedGearNames(hero, gearTable)
+    local names = {}
+    local equipment = hero:try_get("equipment", {})
+    for slot, guid in pairs(equipment) do
+        if slot ~= "_luaTable" and type(guid) == "string" and guid ~= "" then
+            local item = gearTable[guid]
+            if item then
+                names[#names + 1] = item.name
+            end
+        end
+    end
+    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
+    return names
+end
+
 --[[
     UI builders
 ]]
@@ -670,8 +723,9 @@ end
 --- The first row of the info column is a small builder-sheet icon button
 --- followed by the character name and level.
 --- @param entry table { token=token, hero=character, name=string } as produced by CollectHeroes.
+--- @param gearTable table The cached `tbl_Gear` table (guid → gear item), shared across all cards.
 --- @return Panel card The horizontal gui.Panel representing this hero.
-function HeroAudit.BuildHeroCard(entry)
+function HeroAudit.BuildHeroCard(entry, gearTable)
     local token = entry.token
     local hero = entry.hero
 
@@ -706,8 +760,17 @@ function HeroAudit.BuildHeroCard(entry)
     col1Children[#col1Children + 1] = HeroAudit.BuildInfoRow(
         "Ancestry", ancestryName, ancestryStatus, ancestryName == "none chosen"
     )
+    local classDisplayName = className
+    if className ~= "none chosen" then
+        local subclassNames = HeroAudit.GetSubclassNames(hero)
+        if #subclassNames == 0 then
+            classDisplayName = className .. " (no subclass)"
+        else
+            classDisplayName = className .. " (" .. table.concat(subclassNames, ", ") .. ")"
+        end
+    end
     col1Children[#col1Children + 1] = HeroAudit.BuildInfoRow(
-        "Class", className, classStatus, className == "none chosen"
+        "Class", classDisplayName, classStatus, className == "none chosen"
     )
     if numKits > 0 then
         local parts = {}
@@ -818,11 +881,21 @@ function HeroAudit.BuildHeroCard(entry)
         "heroaudit-row-modicon"
     )
 
+    -- Equipped gear row — full width of the info column, above downtime.
+    local gearNames = HeroAudit.GetEquippedGearNames(hero, gearTable)
+    local gearValue = #gearNames > 0 and table.concat(gearNames, ", ") or "none found"
+    local gearRow = HeroAudit.BuildPlainRow(
+        "Equipped Gear",
+        gearValue,
+        "heroaudit-row-gearicon"
+    )
+
     -- Vertical info column to the right of the token image.
     local infoCol = gui.Panel{
         classes = {"heroaudit-info-col"},
         nameRow,
         detailCols,
+        gearRow,
         downtimeRow,
     }
 
@@ -843,6 +916,7 @@ end
 --- @return Panel dialog The root gui.Panel for the popup.
 function HeroAudit.BuildDialog()
     local entries = HeroAudit.CollectHeroes()
+    local gearTable = dmhub.GetTable("tbl_Gear") or {}
 
     local header = gui.Panel{
         classes = {"heroaudit-header"},
@@ -861,7 +935,7 @@ function HeroAudit.BuildDialog()
     else
         local cards = {}
         for _, entry in ipairs(entries) do
-            cards[#cards + 1] = HeroAudit.BuildHeroCard(entry)
+            cards[#cards + 1] = HeroAudit.BuildHeroCard(entry, gearTable)
         end
         body = gui.Panel{
             classes = {"heroaudit-cards"},
