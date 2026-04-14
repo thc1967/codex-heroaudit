@@ -966,6 +966,7 @@ function HeroAudit.BuildDialog()
     }
 end
 
+if dmhub.isDM then
 LaunchablePanel.Register{
     name = "Hero Audit",
     menu = "tools",
@@ -977,3 +978,4 @@ LaunchablePanel.Register{
         return HeroAudit.BuildDialog()
     end,
 }
+end
