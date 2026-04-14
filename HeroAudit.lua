@@ -15,6 +15,16 @@ local mod = dmhub.GetModLoading()
 
 local HeroAudit = {}
 
+-- Substrings stripped from subclass names for display. Longer variants must
+-- precede their shorter prefixes (e.g. "College of the " before "College of ").
+local SUBCLASS_NAME_STRIP = {
+    " Domain",
+    "Disciple of the ",
+    "College of the ",
+    "College of ",
+    "Circle of ",
+}
+
 --[[
     Color palette (matches TacPanel UI)
 ]]
@@ -183,7 +193,7 @@ local heroAuditStyles = {
         width = 16,
         height = 16,
         halign = "left",
-        valign = "center",
+        valign = "top",
         bgimage = "drawsteel/StatBlockIcons/T_UI_ICON_FLAT_STATBLOCK_TRIGGER.png",
         bgcolor = DARK_RED,
         hmargin = 4,
@@ -198,7 +208,7 @@ local heroAuditStyles = {
         width = 16,
         height = 16,
         halign = "left",
-        valign = "center",
+        valign = "top",
         hmargin = 4,
         bgimage = "game-icons/bookmarklet.png",
         bgcolor = MUTED,
@@ -208,7 +218,7 @@ local heroAuditStyles = {
         width = 16,
         height = 16,
         halign = "left",
-        valign = "center",
+        valign = "top",
         hmargin = 4,
         bgimage = "ui-icons/inventory.png",
         bgcolor = MUTED,
@@ -491,7 +501,11 @@ function HeroAudit.GetSubclassNames(hero)
     local entries = hero:GetClassesAndSubClasses() or {}
     for i, entry in ipairs(entries) do
         if i ~= 1 and entry.class then
-            names[#names + 1] = string.gsub(entry.class.name, " Domain", "")
+            local cleaned = entry.class.name
+            for _, pattern in ipairs(SUBCLASS_NAME_STRIP) do
+                cleaned = string.gsub(cleaned, pattern, "")
+            end
+            names[#names + 1] = cleaned
         end
     end
     table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
