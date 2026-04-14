@@ -224,6 +224,26 @@ local heroAuditStyles = {
         bgcolor = MUTED,
     },
     {
+        selectors = {"heroaudit-row-skillsicon"},
+        width = 16,
+        height = 16,
+        halign = "left",
+        valign = "top",
+        hmargin = 4,
+        bgimage = "icons/icon_app/icon_app_185.png",
+        bgcolor = MUTED,
+    },
+    {
+        selectors = {"heroaudit-row-languagesicon"},
+        width = 16,
+        height = 16,
+        halign = "left",
+        valign = "top",
+        hmargin = 4,
+        bgimage = "icons/icon_app/icon_app_22.png",
+        bgcolor = MUTED,
+    },
+    {
         selectors = {"heroaudit-names-list"},
         width = "100%-24",
         height = "auto",
@@ -622,6 +642,44 @@ function HeroAudit.GetAspectNames(hero)
     return names
 end
 
+--- Return the alphabetically-sorted names of every skill the hero has.
+--- Uses the Character Builder pattern of `hero:GetCategorizedSkills()` but
+--- flattens across categories so the audit shows one plain list.
+--- @param hero character The hero to audit.
+--- @return table names Array of skill names, possibly empty.
+function HeroAudit.GetSkillNames(hero)
+    local names = {}
+    local catSkills = hero:GetCategorizedSkills() or {}
+    for _, cat in ipairs(catSkills) do
+        for _, skill in ipairs(cat.skills or {}) do
+            if skill.name then
+                names[#names + 1] = skill.name
+            end
+        end
+    end
+    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
+    return names
+end
+
+--- Return the alphabetically-sorted names of every language the hero knows.
+--- Mirrors the Character Builder's language pane: `hero:LanguagesKnown()`
+--- returns a guid→truthy map that we resolve through `Language.tableName`.
+--- @param hero character The hero to audit.
+--- @return table names Array of language names, possibly empty.
+function HeroAudit.GetLanguageNames(hero)
+    local names = {}
+    local langs = hero:LanguagesKnown() or {}
+    local langTable = dmhub.GetTableVisible(Language.tableName) or {}
+    for guid, _ in pairs(langs) do
+        local lang = langTable[guid]
+        if lang and lang.name then
+            names[#names + 1] = lang.name
+        end
+    end
+    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
+    return names
+end
+
 --- Return the alphabetically-sorted names of every piece of gear the hero
 --- currently has equipped. Equipment lives on the character as a keyed table
 --- `equipment = { [slotName] = gearGuid, ... }`, with a `_luaTable` marker
@@ -895,6 +953,15 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
         "heroaudit-row-modicon"
     )
 
+    -- Skills and Languages rows — full width, listed above Equipped Gear.
+    local skillNames = HeroAudit.GetSkillNames(hero)
+    local skillsValue = #skillNames > 0 and table.concat(skillNames, ", ") or "none chosen"
+    local skillsRow = HeroAudit.BuildPlainRow("Skills", skillsValue, "heroaudit-row-skillsicon")
+
+    local languageNames = HeroAudit.GetLanguageNames(hero)
+    local languagesValue = #languageNames > 0 and table.concat(languageNames, ", ") or "none chosen"
+    local languagesRow = HeroAudit.BuildPlainRow("Languages", languagesValue, "heroaudit-row-languagesicon")
+
     -- Equipped gear row — full width of the info column, above downtime.
     local gearNames = HeroAudit.GetEquippedGearNames(hero, gearTable)
     local gearValue = #gearNames > 0 and table.concat(gearNames, ", ") or "none found"
@@ -909,6 +976,8 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
         classes = {"heroaudit-info-col"},
         nameRow,
         detailCols,
+        skillsRow,
+        languagesRow,
         gearRow,
         downtimeRow,
     }
