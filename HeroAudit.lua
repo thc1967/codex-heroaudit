@@ -673,7 +673,10 @@ function HeroAudit.GetLanguageNames(hero)
     for guid, _ in pairs(langs) do
         local lang = langTable[guid]
         if lang and lang.name then
-            names[#names + 1] = lang.name
+            local speakers = (lang.speakers and #lang.speakers > 0)
+                and string.format(" (%s)", lang.speakers)
+                or ""
+            names[#names + 1] = lang.name .. speakers
         end
     end
     table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
