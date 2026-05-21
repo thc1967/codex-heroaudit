@@ -26,32 +26,18 @@ local SUBCLASS_NAME_STRIP = {
 }
 
 --[[
-    Color palette (matches TacPanel UI)
-]]
-local PANEL_BG   = "#0b0f0d"
-local CARD_BG    = "#040807"
-local GOLD       = "#966D4B"
-local GOLD_LIGHT = "#C49A5A"
-local GOLD_BORDER = "#5C3D10"
-local CREAM      = "#FFFEF8"
-local MUTED      = "#8A8474"
-local WHITE      = "#FFFFFF"
-local DARK_RED   = "#6B2020"
-local MED_GREEN  = "#2D6A4F"
-
---[[
-    Style table — attached once to the root dialog panel. No inline gui.Style{}.
+    Geometry-only layout table. Combined with ThemeEngine.GetStyles() on the
+    root panel so visuals come from the active theme; this table carries only
+    positions and sizes (no color/font). No inline gui.Style{}.
 ]]
 local heroAuditStyles = {
     {
         selectors = {"heroaudit-dialog"},
         width = 1100,
         height = 640,
-        fontFace = "Berling",
         flow = "vertical",
         halign = "center",
         valign = "center",
-        bgcolor = PANEL_BG,
     },
     {
         selectors = {"heroaudit-header"},
@@ -65,10 +51,6 @@ local heroAuditStyles = {
         selectors = {"heroaudit-header-label"},
         width = "auto",
         height = 30,
-        fontFace = "Berling",
-        fontSize = 24,
-        bold = true,
-        color = GOLD,
         textAlignment = "center",
         halign = "center",
         valign = "top",
@@ -77,9 +59,6 @@ local heroAuditStyles = {
         selectors = {"heroaudit-empty"},
         width = "auto",
         height = "auto",
-        fontFace = "Berling",
-        fontSize = 18,
-        color = MUTED,
         textAlignment = "center",
         halign = "center",
         valign = "center",
@@ -99,10 +78,6 @@ local heroAuditStyles = {
         height = "auto",
         halign = "left",
         valign = "top",
-        bgimage = true,
-        bgcolor = CARD_BG,
-        border = {x1 = 1, x2 = 1, y1 = 1, y2 = 1},
-        borderColor = GOLD_BORDER,
         vmargin = 4,
         hpad = 12,
         vpad = 10,
@@ -120,10 +95,6 @@ local heroAuditStyles = {
         selectors = {"heroaudit-cardname"},
         width = "auto",
         height = "auto",
-        fontFace = "Berling",
-        fontSize = 18,
-        bold = true,
-        color = GOLD_LIGHT,
         textAlignment = "left",
         halign = "left",
         hmargin = 4,
@@ -132,9 +103,6 @@ local heroAuditStyles = {
         selectors = {"heroaudit-level"},
         width = "auto",
         height = "auto",
-        fontFace = "Berling",
-        fontSize = 14,
-        color = CREAM,
         textAlignment = "left",
         halign = "left",
         valign = "bottom",
@@ -180,9 +148,6 @@ local heroAuditStyles = {
         selectors = {"heroaudit-row-text"},
         width = "100%-24",
         height = "auto",
-        fontFace = "Inter",
-        fontSize = 14,
-        color = CREAM,
         textAlignment = "left",
         halign = "left",
         valign = "center",
@@ -194,14 +159,7 @@ local heroAuditStyles = {
         height = 16,
         halign = "left",
         valign = "top",
-        bgimage = "drawsteel/StatBlockIcons/T_UI_ICON_FLAT_STATBLOCK_TRIGGER.png",
-        bgcolor = DARK_RED,
         hmargin = 4,
-    },
-    {
-        selectors = {"heroaudit-row-indicator", "complete"},
-        bgimage = "icons/icon_common/icon_common_29.png",
-        bgcolor = MED_GREEN,
     },
     {
         selectors = {"heroaudit-row-modicon"},
@@ -211,7 +169,6 @@ local heroAuditStyles = {
         valign = "top",
         hmargin = 4,
         bgimage = "game-icons/bookmarklet.png",
-        bgcolor = MUTED,
     },
     {
         selectors = {"heroaudit-row-gearicon"},
@@ -221,7 +178,6 @@ local heroAuditStyles = {
         valign = "top",
         hmargin = 4,
         bgimage = "ui-icons/inventory.png",
-        bgcolor = MUTED,
     },
     {
         selectors = {"heroaudit-row-skillsicon"},
@@ -231,7 +187,6 @@ local heroAuditStyles = {
         valign = "top",
         hmargin = 4,
         bgimage = "icons/icon_app/icon_app_185.png",
-        bgcolor = MUTED,
     },
     {
         selectors = {"heroaudit-row-languagesicon"},
@@ -241,41 +196,6 @@ local heroAuditStyles = {
         valign = "top",
         hmargin = 4,
         bgimage = "icons/icon_app/icon_app_22.png",
-        bgcolor = MUTED,
-    },
-    {
-        selectors = {"heroaudit-names-list"},
-        width = "100%-24",
-        height = "auto",
-        fontFace = "Inter",
-        fontSize = 12,
-        color = CREAM,
-        textAlignment = "left",
-        halign = "left",
-        lmargin = 22,
-        rmargin = 6,
-        bmargin = 4,
-        textWrap = true,
-    },
-    {
-        selectors = {"heroaudit-builder-btn"},
-        width = 18,
-        height = 18,
-        halign = "left",
-        valign = "center",
-        bgimage = "ui-icons/character-sheet.png",
-        bgcolor = WHITE,
-        cornerRadius = 3,
-        hmargin = 4,
-    },
-    {
-        selectors = {"heroaudit-builder-btn", "hover"},
-        brightness = 1.3,
-        transitionTime = 0.1,
-    },
-    {
-        selectors = {"heroaudit-builder-btn", "press"},
-        brightness = 0.8,
     },
 }
 
@@ -723,13 +643,13 @@ function HeroAudit.BuildPlainRow(label, value, iconClass)
     local children = {}
     if iconClass ~= nil then
         children[#children + 1] = gui.Panel{
-            classes = {iconClass},
+            classes = {iconClass, "bgInverse"},
         }
     end
     children[#children + 1] = gui.Label{
-        classes = {"heroaudit-row-text"},
+        classes = {"heroaudit-row-text", "sizeS"},
         markdown = true,
-        text = string.format("**<color=%s>%s:</color>** %s", MUTED, label, value),
+        text = ThemeEngine.ResolveTokens(string.format("**<color=@fgMuted>%s:</color>** %s", label, value)),
     }
     return gui.Panel{
         classes = {"heroaudit-row"},
@@ -766,9 +686,9 @@ function HeroAudit.BuildInfoRow(label, name, status, isMissing)
     -- Build the plain value that follows the colon.
     local text
     if name ~= nil then
-        text = string.format("**<color=%s>%s:</color>** %s", MUTED, labelPrefix, name)
+        text = ThemeEngine.ResolveTokens(string.format("**<color=@fgMuted>%s:</color>** %s", labelPrefix, name))
     else
-        text = string.format("**<color=%s>%s:</color>**", MUTED, labelPrefix)
+        text = ThemeEngine.ResolveTokens(string.format("**<color=@fgMuted>%s:</color>**", labelPrefix))
     end
 
     local rowClasses = {"heroaudit-row"}
@@ -776,18 +696,15 @@ function HeroAudit.BuildInfoRow(label, name, status, isMissing)
         rowClasses[#rowClasses + 1] = "missing"
     end
 
-    local indicatorClasses = {"heroaudit-row-indicator"}
-    if isComplete then
-        indicatorClasses[#indicatorClasses + 1] = "complete"
-    end
-
     return gui.Panel{
         classes = rowClasses,
         gui.Panel{
-            classes = indicatorClasses,
+            classes = { "heroaudit-row-indicator", isComplete and "bgSuccess" or "bgDanger" },
+            bgimage = isComplete and "icons/icon_common/icon_common_29.png"
+                or "drawsteel/StatBlockIcons/T_UI_ICON_FLAT_STATBLOCK_TRIGGER.png",
         },
         gui.Label{
-            classes = {"heroaudit-row-text"},
+            classes = {"heroaudit-row-text", "sizeS"},
             markdown = true,
             text = text,
         },
@@ -814,18 +731,23 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
     -- Row 1: builder-sheet button + name + level
     local nameRow = gui.Panel{
         classes = {"heroaudit-name-row"},
-        gui.Panel{
-            classes = {"heroaudit-builder-btn"},
+        gui.Button{
+            icon = "ui-icons/character-sheet.png",
+            width = 18,
+            height = 18,
+            halign = "left",
+            valign = "center",
+            hmargin = 4,
             press = function()
                 token:ShowSheet("Builder")
             end,
         },
         gui.Label{
-            classes = {"heroaudit-cardname"},
+            classes = {"heroaudit-cardname", "bold", "sizeL"},
             text = entry.name,
         },
         gui.Label{
-            classes = {"heroaudit-level"},
+            classes = {"heroaudit-level", "sizeS"},
             text = HeroAudit.FormatLevel(hero),
         },
     }
@@ -863,19 +785,18 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
         if anyMissing then
             rowClasses[#rowClasses + 1] = "missing"
         end
-        local indicatorClasses = {"heroaudit-row-indicator"}
-        if not anyMissing then
-            indicatorClasses[#indicatorClasses + 1] = "complete"
-        end
+        local isComplete = not anyMissing
         col1Children[#col1Children + 1] = gui.Panel{
             classes = rowClasses,
             gui.Panel{
-                classes = indicatorClasses,
+                classes = { "heroaudit-row-indicator", isComplete and "bgSuccess" or "bgDanger" },
+                bgimage = isComplete and "icons/icon_common/icon_common_29.png"
+                    or "drawsteel/StatBlockIcons/T_UI_ICON_FLAT_STATBLOCK_TRIGGER.png",
             },
             gui.Label{
-                classes = {"heroaudit-row-text"},
+                classes = {"heroaudit-row-text", "sizeS"},
                 markdown = true,
-                text = string.format("**<color=%s>Kit:</color>** %s", MUTED, table.concat(parts, ", ")),
+                text = ThemeEngine.ResolveTokens(string.format("**<color=@fgMuted>Kit:</color>** %s", table.concat(parts, ", "))),
             },
         }
     end
@@ -987,7 +908,7 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
 
     -- Full card: token image + info column in a horizontal flow.
     return gui.Panel{
-        classes = {"heroaudit-card"},
+        classes = {"heroaudit-card", "bordered"},
         gui.CreateTokenImage(token, {
             width = 80,
             height = 80,
@@ -1007,7 +928,7 @@ function HeroAudit.BuildDialog()
     local header = gui.Panel{
         classes = {"heroaudit-header"},
         gui.Label{
-            classes = {"heroaudit-header-label"},
+            classes = {"heroaudit-header-label", "bold", "sizeXl"},
             text = "Hero Audit",
         },
     }
@@ -1015,8 +936,9 @@ function HeroAudit.BuildDialog()
     local body
     if #entries == 0 then
         body = gui.Label{
-            classes = {"heroaudit-empty"},
-            text = "No player-assigned heroes found.",
+            classes = {"heroaudit-empty", "sizeL"},
+            markdown = true,
+            text = ThemeEngine.ResolveTokens("<color=@fgMuted>No player-assigned heroes found.</color>"),
         }
     else
         local cards = {}
@@ -1031,8 +953,8 @@ function HeroAudit.BuildDialog()
     end
 
     return gui.Panel{
-        styles = heroAuditStyles,
-        classes = {"heroaudit-dialog"},
+        styles = { ThemeEngine.GetStyles(), heroAuditStyles },
+        classes = {"heroaudit-dialog", "launchablePanel"},
         header,
         body,
     }
