@@ -15,6 +15,9 @@ local mod = dmhub.GetModLoading()
 
 local HeroAudit = {}
 
+local WINDOW_WIDTH = 1100
+local WINDOW_HEIGHT = 640
+
 -- Substrings stripped from subclass names for display. Longer variants must
 -- precede their shorter prefixes (e.g. "College of the " before "College of ").
 local SUBCLASS_NAME_STRIP = {
@@ -32,30 +35,6 @@ local SUBCLASS_NAME_STRIP = {
 ]]
 local heroAuditStyles = {
     {
-        selectors = {"heroaudit-dialog"},
-        width = 1100,
-        height = 640,
-        flow = "vertical",
-        halign = "center",
-        valign = "center",
-    },
-    {
-        selectors = {"heroaudit-header"},
-        width = "80%",
-        height = 40,
-        flow = "vertical",
-        halign = "center",
-        valign = "top",
-    },
-    {
-        selectors = {"heroaudit-header-label"},
-        width = "auto",
-        height = 30,
-        textAlignment = "center",
-        halign = "center",
-        valign = "top",
-    },
-    {
         selectors = {"heroaudit-empty"},
         width = "auto",
         height = "auto",
@@ -66,8 +45,8 @@ local heroAuditStyles = {
     {
         selectors = {"heroaudit-cards"},
         flow = "vertical",
-        width = "100%-32",
-        height = "100%-60",
+        width = "100%",
+        height = "100%",
         halign = "center",
         valign = "top",
     },
@@ -81,6 +60,18 @@ local heroAuditStyles = {
         vmargin = 4,
         hpad = 12,
         vpad = 10,
+        bgimage = true,
+    },
+    -- The theme's zebra pair, on our own compound selectors rather than its
+    -- {row, evenRow} classes: {row} would also assert width/height auto and
+    -- collide at equal specificity with the card's own geometry above.
+    {
+        selectors = {"heroaudit-card", "heroaudit-card-even"},
+        bgcolor = "@bg",
+    },
+    {
+        selectors = {"heroaudit-card", "heroaudit-card-odd"},
+        bgcolor = "@bgAlt",
     },
     {
         selectors = {"heroaudit-info-col"},
@@ -97,6 +88,15 @@ local heroAuditStyles = {
         height = "auto",
         textAlignment = "left",
         halign = "left",
+        hmargin = 4,
+    },
+    {
+        selectors = {"heroaudit-player"},
+        width = "auto",
+        height = "auto",
+        textAlignment = "left",
+        halign = "left",
+        valign = "bottom",
         hmargin = 4,
     },
     {
@@ -168,7 +168,7 @@ local heroAuditStyles = {
         halign = "left",
         valign = "top",
         hmargin = 4,
-        bgimage = "game-icons/bookmarklet.png",
+        bgimage = "phosphor/hammer.png",
     },
     {
         selectors = {"heroaudit-row-gearicon"},
@@ -177,7 +177,7 @@ local heroAuditStyles = {
         halign = "left",
         valign = "top",
         hmargin = 4,
-        bgimage = "ui-icons/inventory.png",
+        bgimage = "phosphor/shield-checkered.png",
     },
     {
         selectors = {"heroaudit-row-skillsicon"},
@@ -186,7 +186,7 @@ local heroAuditStyles = {
         halign = "left",
         valign = "top",
         hmargin = 4,
-        bgimage = "icons/icon_app/icon_app_185.png",
+        bgimage = "phosphor/toolbox.png",
     },
     {
         selectors = {"heroaudit-row-languagesicon"},
@@ -195,7 +195,7 @@ local heroAuditStyles = {
         halign = "left",
         valign = "top",
         hmargin = 4,
-        bgimage = "icons/icon_app/icon_app_22.png",
+        bgimage = "phosphor/translate.png",
     },
 }
 
@@ -221,6 +221,21 @@ function HeroAudit.FormatLevel(hero)
         end
     end
     return "Level " .. tostring(level)
+end
+
+--- Resolve the display name of the user a hero is assigned to.
+--- @param token token The hero's token, already known to carry a non-party owner.
+--- @return string|nil displayName The owning player's name, or nil if unresolvable.
+function HeroAudit.GetPlayerName(token)
+    local info = token.ownerId ~= nil and dmhub.GetSessionInfo(token.ownerId) or nil
+    if info == nil then
+        return nil
+    end
+    local displayName = info.displayName
+    if displayName == nil or displayName == "" then
+        return nil
+    end
+    return displayName
 end
 
 --- Collect every player-assigned hero token in the game, sorted A→Z.
@@ -716,8 +731,9 @@ end
 --- followed by the character name and level.
 --- @param entry table { token=token, hero=character, name=string } as produced by CollectHeroes.
 --- @param gearTable table The cached `tbl_Gear` table (guid → gear item), shared across all cards.
+--- @param index number This card's 1-based position, which picks its zebra stripe.
 --- @return Panel card The horizontal gui.Panel representing this hero.
-function HeroAudit.BuildHeroCard(entry, gearTable)
+function HeroAudit.BuildHeroCard(entry, gearTable, index)
     local token = entry.token
     local hero = entry.hero
 
@@ -728,7 +744,10 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
     local classStatus, className = HeroAudit.BuildClassStatus(hero)
     local numKits, kitNames = HeroAudit.GetKitInfo(hero)
 
-    -- Row 1: builder-sheet button + name + level
+    -- Row 1: builder-sheet button + name + owning player + level. The player
+    -- label is dropped rather than shown empty when the owner cannot resolve.
+    local playerName = HeroAudit.GetPlayerName(token)
+
     local nameRow = gui.Panel{
         classes = {"heroaudit-name-row"},
         gui.Button{
@@ -746,6 +765,10 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
             classes = {"heroaudit-cardname", "bold", "sizeL"},
             text = entry.name,
         },
+        playerName ~= nil and gui.Label{
+            classes = {"heroaudit-player", "sizeS"},
+            text = "(" .. playerName .. ")",
+        } or nil,
         gui.Label{
             classes = {"heroaudit-level", "sizeS"},
             text = HeroAudit.FormatLevel(hero),
@@ -907,8 +930,10 @@ function HeroAudit.BuildHeroCard(entry, gearTable)
     }
 
     -- Full card: token image + info column in a horizontal flow.
+    local stripe = index % 2 == 0 and "heroaudit-card-even" or "heroaudit-card-odd"
+
     return gui.Panel{
-        classes = {"heroaudit-card", "bordered"},
+        classes = {"heroaudit-card", stripe},
         gui.CreateTokenImage(token, {
             width = 80,
             height = 80,
@@ -925,14 +950,6 @@ function HeroAudit.BuildDialog()
     local entries = HeroAudit.CollectHeroes()
     local gearTable = dmhub.GetTable("tbl_Gear") or {}
 
-    local header = gui.Panel{
-        classes = {"heroaudit-header"},
-        gui.Label{
-            classes = {"heroaudit-header-label", "bold", "sizeXl"},
-            text = "Hero Audit",
-        },
-    }
-
     local body
     if #entries == 0 then
         body = gui.Label{
@@ -942,8 +959,8 @@ function HeroAudit.BuildDialog()
         }
     else
         local cards = {}
-        for _, entry in ipairs(entries) do
-            cards[#cards + 1] = HeroAudit.BuildHeroCard(entry, gearTable)
+        for i, entry in ipairs(entries) do
+            cards[#cards + 1] = HeroAudit.BuildHeroCard(entry, gearTable, i)
         end
         body = gui.Panel{
             classes = {"heroaudit-cards"},
@@ -952,19 +969,26 @@ function HeroAudit.BuildDialog()
         }
     end
 
-    return gui.Panel{
-        styles = { ThemeEngine.GetStyles(), heroAuditStyles },
-        classes = {"heroaudit-dialog", "launchablePanel"},
-        header,
-        body,
+    local dlg = DialogShell.CreateNew{
+        classes = {"launchablePanel"},
+        title = "Hero Audit",
+        width = WINDOW_WIDTH,
+        height = WINDOW_HEIGHT,
+        footerCells = false,
+        close = "host",
+        styles = heroAuditStyles,
     }
+
+    dlg:SetWorkingContent(body)
+
+    return dlg:Root()
 end
 
 if dmhub.isDM then
 LaunchablePanel.Register{
     name = "Hero Audit",
     menu = "tools",
-    icon = "icons/icon_app/icon_app_16.png",
+    icon = "phosphor/list-magnifying-glass.png",
     halign = "center",
     valign = "center",
     draggable = true,
