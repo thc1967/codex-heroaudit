@@ -172,10 +172,52 @@ local function BuildHealthBar(token, health, setEntryOpen)
 
     --"fg", like the character panel's reading: the fill already carries the
     --status colour, so anything drawn over it stays neutral.
+    --
+    --bgimage/clear: a label is not a hit target without a background, so the
+    --history would never be reachable. Kept clear so nothing changes visually.
     local label = gui.Label{
         classes = {"ha-health-label", "sizeXxs", "bold", "fg"},
         floating = true,
+        bgimage = true,
+        bgcolor = "clear",
         text = health.text,
+
+        linger = function(element)
+            if not token.valid or token.properties == nil then
+                return
+            end
+
+            local children = {
+                gui.Label{
+                    classes = {"ha-history-row", "bold"},
+                    text = "Recent changes to stamina",
+                },
+            }
+
+            local rows = HAHeroData.StaminaHistory(token.properties)
+            if #rows == 0 then
+                children[1].text = "No changes recorded for stamina"
+            end
+
+            --Muted where there is no direction to report: the first row has
+            --nothing before it to compare against, and a set that did not move
+            --the number is neither damage nor healing.
+            for _, row in ipairs(rows) do
+                children[#children + 1] = gui.Label{
+                    classes = {"ha-history-row", row.status or "fgMuted"},
+                    text = row.text,
+                }
+            end
+
+            element.tooltip = gui.TooltipFrame(
+                gui.Panel{
+                    classes = {"ha-history"},
+                    styles = ThemeEngine.MergeStyles(HAConstants.historyStyles),
+                    children = children,
+                },
+                { halign = "left", valign = "top" }
+            )
+        end,
     }
 
     local children = {
@@ -685,7 +727,7 @@ end
 --- Every hero card, alphabetical.
 --- @return Panel[] cards
 function HACombatTab.BuildCards()
-    local entries = HAHeroData.CollectHeroes()
+    local entries = HAHeroData.CollectCombatHeroes()
 
     if #entries == 0 then
         return {

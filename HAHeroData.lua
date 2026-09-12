@@ -29,6 +29,114 @@ function HAHeroData.CollectHeroes()
     return entries
 end
 
+--- Every hero on the map or in the running fight, sorted A→Z. The two sets
+--- genuinely differ: a hero can be in the initiative queue without being placed,
+--- and standing on the map without having joined the fight.
+---
+--- Drawn from the global character list rather than `dmhub.allTokens`, which is
+--- map-scoped and can never see an unplaced combatant.
+--- @return table entries Array of { token=token, hero=character, name=string }, alphabetical.
+function HAHeroData.CollectCombatHeroes()
+    local onMap = {}
+    for _, token in ipairs(dmhub.allTokens) do
+        onMap[token.charid] = true
+    end
+
+    --Only while a fight is actually running: a hidden queue still holds the
+    --entries from the last one.
+    local combatants = nil
+    local queue = dmhub.initiativeQueue
+    if queue ~= nil and not queue.hidden then
+        combatants = queue.entries
+    end
+
+    local entries = {}
+    for _, token in ipairs(table.values(game.GetGameGlobalCharacters())) do
+        if token.properties ~= nil and token.properties:IsHero() then
+            local include = onMap[token.charid] == true
+            if not include and combatants ~= nil then
+                include = combatants[InitiativeQueue.GetInitiativeId(token)] ~= nil
+            end
+
+            if include then
+                entries[#entries + 1] = {
+                    token = token,
+                    hero = token.properties,
+                    name = token.name or "Unknown",
+                }
+            end
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        return string.lower(a.name) < string.lower(b.name)
+    end)
+
+    return entries
+end
+
+--- The player party's name, for the filter that reads from it.
+--- @return string name Falls back to "Player" when the party will not resolve.
+function HAHeroData.PartyName()
+    local party = (dmhub.GetTable(Party.tableName) or {})[GetDefaultPartyID()]
+    if party == nil or party.name == nil or party.name == "" then
+        return "Player"
+    end
+    return party.name
+end
+
+--- The player party's roster, as tokens. Placed or not: party membership is
+--- roster data, so it sees heroes the map never will.
+--- @return table tokens
+local function PartyTokens()
+    local tokens = {}
+    for _, charid in ipairs(dmhub.GetCharacterIdsInParty(GetDefaultPartyID()) or {}) do
+        local token = dmhub.GetCharacterById(charid)
+        if token ~= nil then
+            tokens[#tokens + 1] = token
+        end
+    end
+    return tokens
+end
+
+--- Heroes under one of the Exploration tab's filters, sorted A→Z.
+--- @param filterId string One of the HAConstants.filter* ids.
+--- @return table entries Array of { token=token, hero=character, name=string }, alphabetical.
+function HAHeroData.CollectByFilter(filterId)
+    local tokens
+    if filterId == HAConstants.filterMap then
+        tokens = dmhub.allTokens
+    elseif filterId == HAConstants.filterParty then
+        tokens = PartyTokens()
+    else
+        tokens = table.values(game.GetGameGlobalCharacters())
+    end
+
+    local entries = {}
+    for _, token in ipairs(tokens) do
+        if token ~= nil and token.properties ~= nil and token.properties:IsHero() then
+            --"PARTY" is the shared-ownership marker, not a player.
+            local owner = token.ownerId
+            local include = filterId ~= HAConstants.filterAssigned
+                or (owner ~= nil and owner ~= "" and owner ~= "PARTY")
+
+            if include then
+                entries[#entries + 1] = {
+                    token = token,
+                    hero = token.properties,
+                    name = token.name or "Unknown",
+                }
+            end
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        return string.lower(a.name) < string.lower(b.name)
+    end)
+
+    return entries
+end
+
 --- Shorten a hero name for a narrow card, with an ASCII ellipsis.
 --- @param name string|nil The hero name.
 --- @param maxChars number|nil Cap, defaulting to HAConstants.nameMaxChars.
@@ -93,6 +201,58 @@ function HAHeroData.RecoveryResource()
         end
     end
     return nil, nil
+end
+
+--- A hero's recent stamina changes, as rows ready to print.
+---
+--- The engine records absolute values, not deltas, so the direction of each
+--- change is the difference from the one before it -- which is what lets a row
+--- be coloured as damage or healing. Only the latest refresh group is kept, the
+--- way the engine's own history tooltip does it.
+--- @param hero character The hero to read.
+--- @return table[] rows { text, status }, oldest first; status is a tint class or nil.
+function HAHeroData.StaminaHistory(hero)
+    local history = hero:GetStatHistory("stamina"):GetHistory()
+
+    local entries = {}
+    local refreshid = nil
+    for _, entry in ipairs(history) do
+        if entry.refreshid ~= refreshid then
+            entries = {}
+        end
+        entries[#entries + 1] = entry
+        refreshid = entry.refreshid
+    end
+
+    local rows = {}
+    local previous = nil
+    for _, entry in ipairs(entries) do
+        local value = tonumber(entry.value)
+
+        local status = nil
+        local prefix = ""
+        if value ~= nil and previous ~= nil and value ~= previous then
+            local delta = value - previous
+            status = delta < 0 and "danger" or "success"
+            prefix = string.format("%+d  ", delta)
+        end
+        if value ~= nil then
+            previous = value
+        end
+
+        local note = ""
+        if entry.note ~= nil and entry.note ~= "" then
+            note = string.format(" (%s)", entry.note)
+        end
+
+        rows[#rows + 1] = {
+            text = string.format("%sSet to %s by %s %s%s",
+                prefix, tostring(entry.value), tostring(entry.who), tostring(entry.when), note),
+            status = status,
+        }
+    end
+
+    return rows
 end
 
 --- Read a hero's recovery value and how many they have left.
@@ -339,27 +499,46 @@ function HAHeroData.GetLanguageNames(hero, includeSpeakers)
     return names
 end
 
+--- The skill table's id for a skill name, which is what a roll request wants.
+--- @param name string The skill's display name.
+--- @return string|nil skillid
+function HAHeroData.SkillIdByName(name)
+    for skillid, skill in pairs(dmhub.GetTable(Skill.tableName) or {}) do
+        if skill.name == name then
+            return skillid
+        end
+    end
+    return nil
+end
+
 --- Roll a per-hero list up into one entry per distinct value, counting heroes.
 --- @param entries table[] Hero entries as produced by CollectHeroes.
 --- @param listFn fun(hero: character): string[] Produces one hero's values.
---- @return table[] aggregated { name, count, heroes }, alphabetical, heroes alphabetical.
+--- @return table[] aggregated { name, count, members }, alphabetical; members are
+--- { name, token } and alphabetical too.
 function HAHeroData.Aggregate(entries, listFn)
     local byName = {}
     for _, entry in ipairs(entries) do
         for _, name in ipairs(listFn(entry.hero)) do
             local bucket = byName[name]
             if bucket == nil then
-                bucket = { name = name, count = 0, heroes = {} }
+                bucket = { name = name, count = 0, members = {} }
                 byName[name] = bucket
             end
             bucket.count = bucket.count + 1
-            bucket.heroes[#bucket.heroes + 1] = entry.name
+            --Name and token together, so sorting cannot desync them.
+            bucket.members[#bucket.members + 1] = {
+                name = entry.name,
+                token = entry.token,
+            }
         end
     end
 
     local result = {}
     for _, bucket in pairs(byName) do
-        table.sort(bucket.heroes, function(a, b) return string.lower(a) < string.lower(b) end)
+        table.sort(bucket.members, function(a, b)
+            return string.lower(a.name) < string.lower(b.name)
+        end)
         result[#result + 1] = bucket
     end
     table.sort(result, function(a, b)

@@ -8,7 +8,7 @@ HADockPanel = RegisterGameType("HADockPanel")
 --- A small bordered pill: optional icon, a label, and a remove glyph when the
 --- caller supplies a handler. Shared by conditions, languages and skills so all
 --- three read as one control.
---- @param args table { label, tooltip?, icon?, iconColor?, iconHueshift?, onRemove?, extraClasses?, extraChildren? }
+--- @param args table { label, tooltip?, icon?, iconColor?, iconHueshift?, onRemove?, onPress?, extraClasses?, extraChildren? }
 --- @return Panel
 function HADockPanel.Chip(args)
     local children = {}
@@ -59,11 +59,20 @@ function HADockPanel.Chip(args)
         classes[#classes + 1] = class
     end
 
+    if args.onPress ~= nil then
+        classes[#classes + 1] = "hoverable"
+    end
+
     return gui.Panel{
         classes = classes,
         --Inline: the active theme rounds panels by default, and a rule of ours
         --only ties with it.
         cornerRadius = 0,
+
+        hoverCursor = args.onPress ~= nil and "pressbutton" or nil,
+        press = args.onPress ~= nil and function(element)
+            args.onPress(element)
+        end or nil,
         --Every chip tooltip is the small one: a condition's description is the
         --longest text on the panel and at body size it swamps the window.
         linger = args.tooltip ~= nil and function(element)
@@ -76,12 +85,14 @@ function HADockPanel.Chip(args)
     }
 end
 
---- Which heroes are on show, as a comparable string, so the combat tab is only
---- rebuilt when the party itself changes rather than on every object update.
+--- Which heroes the combat tab is showing, as a comparable string, so it is
+--- only rebuilt when that set changes rather than on every object update. It
+--- tracks placement and combat membership, neither of which is an object change
+--- any monitor path reports.
 --- @return string signature
 local function RosterSignature()
     local ids = {}
-    for _, entry in ipairs(HAHeroData.CollectHeroes()) do
+    for _, entry in ipairs(HAHeroData.CollectCombatHeroes()) do
         ids[#ids + 1] = entry.token.charid
     end
     return table.concat(ids, ",")
@@ -103,14 +114,8 @@ function HADockPanel.Build()
         children = HACombatTab.BuildCards(),
     }
 
-    local explorationBody = gui.Panel{
-        classes = {"ha-tabbody"},
-        vscroll = true,
-        refreshData = function(element)
-            element.children = HAExplorationTab.BuildSections()
-        end,
-        children = HAExplorationTab.BuildSections(),
-    }
+    --Built whole by the tab, which owns the filter its sections are read under.
+    local explorationBody = HAExplorationTab.Build()
 
     --Assigned below; the press handlers close over them and only run later.
     local combatTab

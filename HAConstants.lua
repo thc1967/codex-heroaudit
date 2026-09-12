@@ -19,7 +19,7 @@ HAConstants.iconHarm = "phosphor/minus-circle-light.png"
 HAConstants.iconHeal = "phosphor/plus-circle-light.png"
 HAConstants.iconSpeed = "phosphor/sneaker-move.png"
 HAConstants.iconStability = "phosphor/anchor.png"
-HAConstants.iconDisengage = "phosphor/ghost-light.png"
+HAConstants.iconDisengage = "90af1d38-c00f-4aaa-b671-ba0a49c3ef49"
 
 --- How each off-the-ground movement mode reads. Keyed by what
 --- `CurrentMoveType()` returns; anything absent leaves the row off entirely.
@@ -53,6 +53,72 @@ HAConstants.tooltipFontSize = 10
 
 --- Surges and heroic resources only exist in combat; this stands in otherwise.
 HAConstants.notInCombat = "-"
+
+HAConstants.iconFilter = "phosphor/funnel-light.png"
+
+--- Which heroes the Exploration tab aggregates over. The order here is the
+--- order of the menu, and the first is the opening default.
+HAConstants.filterAssigned = "assigned"
+HAConstants.filterParty = "party"
+HAConstants.filterMap = "map"
+HAConstants.filterAll = "all"
+
+HAConstants.explorationFilters = {
+    {
+        id = HAConstants.filterAssigned,
+        text = "Heroes assigned to players",
+    },
+    --textFormat, not text: the party's own name is filled in at display time,
+    --so renaming it renames the filter.
+    {
+        id = HAConstants.filterParty,
+        textFormat = "Heroes in the %s party",
+    },
+    {
+        id = HAConstants.filterMap,
+        text = "Heroes on the map",
+    },
+    {
+        id = HAConstants.filterAll,
+        text = "All Heroes",
+        dmOnly = true,
+    },
+}
+
+--- The stamina history tooltip re-roots out of the panel, so it carries its own
+--- cascade. Rows are tinted by composing a status class over these.
+HAConstants.historyStyles = {
+    {
+        selectors = {"ha-history"},
+        width = "auto",
+        height = "auto",
+        flow = "vertical",
+        halign = "left",
+        valign = "top",
+        pad = 4,
+    },
+    {
+        selectors = {"label", "ha-history-row"},
+        width = "auto",
+        height = "auto",
+        halign = "left",
+        valign = "top",
+        textAlignment = "left",
+        fontSize = 10,
+        vmargin = 1,
+    },
+}
+
+--- A context menu of ours is a short list of short phrases, so it does not want
+--- the full-size menu type. `priority` rather than a fourth selector: the
+--- theme's own rule is {label, contextMenuLabel} and a copy would only tie.
+HAConstants.menuStyles = {
+    {
+        selectors = {"label", "contextMenuLabel"},
+        priority = 100,
+        fontSize = 11,
+    },
+}
 
 --[[
     Geometry-only layout table, merged with ThemeEngine.GetStyles() at the dock
@@ -376,6 +442,32 @@ HAConstants.styles = {
     },
 
     --[[ Exploration tab ]]
+    {
+        selectors = {"ha-filter-row"},
+        width = "100%",
+        height = "auto",
+        flow = "horizontal",
+        halign = "left",
+        valign = "top",
+        vmargin = 2,
+    },
+    --Centred across everything the button does not take, rather than across the
+    --whole row, so the text does not sit visibly off-centre.
+    {
+        selectors = {"ha-filter-label"},
+        width = "100%-22",
+        height = "auto",
+        halign = "left",
+        valign = "center",
+        textAlignment = "center",
+    },
+    {
+        selectors = {"ha-filter-button"},
+        width = 16,
+        height = 16,
+        halign = "right",
+        valign = "center",
+    },
     {
         selectors = {"ha-heading"},
         width = "100%",
