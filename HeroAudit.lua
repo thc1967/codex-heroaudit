@@ -241,25 +241,9 @@ end
 --- Collect every player-assigned hero token in the game, sorted A→Z.
 --- @return table entries Array of { token=token, hero=character, name=string }, alphabetical.
 function HeroAudit.CollectHeroes()
-    local entries = {}
-    local allTokens = table.values(game.GetGameGlobalCharacters())
-    for _, token in ipairs(allTokens) do
-        local owner = token.ownerId
-        if owner and owner ~= "PARTY" and token.properties and token.properties:IsHero() then
-            entries[#entries + 1] = {
-                token = token,
-                hero = token.properties,
-                name = token.name or "Unknown",
-            }
-        end
-    end
-
-    table.sort(entries, function(a, b)
-        return string.lower(a.name) < string.lower(b.name)
-    end)
-
-    return entries
+    return HAHeroData.CollectHeroes()
 end
+
 
 --[[
     Per-category selection-status builders.
@@ -583,40 +567,17 @@ end
 --- @param hero character The hero to audit.
 --- @return table names Array of skill names, possibly empty.
 function HeroAudit.GetSkillNames(hero)
-    local names = {}
-    local catSkills = hero:GetCategorizedSkills() or {}
-    for _, cat in ipairs(catSkills) do
-        for _, skill in ipairs(cat.skills or {}) do
-            if skill.name then
-                names[#names + 1] = skill.name
-            end
-        end
-    end
-    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
-    return names
+    return HAHeroData.GetSkillNames(hero)
 end
 
---- Return the alphabetically-sorted names of every language the hero knows.
---- Mirrors the Character Builder's language pane: `hero:LanguagesKnown()`
---- returns a guid→truthy map that we resolve through `Language.tableName`.
+--- Return the alphabetically-sorted names of every language the hero knows,
+--- each with its "(who speaks it)" parenthetical.
 --- @param hero character The hero to audit.
 --- @return table names Array of language names, possibly empty.
 function HeroAudit.GetLanguageNames(hero)
-    local names = {}
-    local langs = hero:LanguagesKnown() or {}
-    local langTable = dmhub.GetTableVisible(Language.tableName) or {}
-    for guid, _ in pairs(langs) do
-        local lang = langTable[guid]
-        if lang and lang.name then
-            local speakers = (lang.speakers and #lang.speakers > 0)
-                and string.format(" (%s)", lang.speakers)
-                or ""
-            names[#names + 1] = lang.name .. speakers
-        end
-    end
-    table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
-    return names
+    return HAHeroData.GetLanguageNames(hero, true)
 end
+
 
 --- Return the alphabetically-sorted names of every piece of gear the hero
 --- currently has equipped. Equipment lives on the character as a keyed table
