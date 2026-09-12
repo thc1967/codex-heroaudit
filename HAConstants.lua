@@ -172,6 +172,13 @@ HAConstants.styles = {
         border = {x1 = 0, x2 = 0, y1 = 1, y2 = 0},
         borderColor = "@border",
     },
+    --A summon sits indented under its summoner and shares its stripe, so the
+    --two read as one group.
+    {
+        selectors = {"ha-card", "ha-card-summon"},
+        width = "100%-24",
+        lmargin = 16,
+    },
     {
         selectors = {"ha-card", "ha-card-even"},
         bgcolor = "@bg",

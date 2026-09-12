@@ -579,6 +579,18 @@ local function BuildConditionsRow(token)
         }
     end
 
+    --After the conditions, and never removable: an aura belongs to whatever is
+    --emitting it, not to the hero standing in it.
+    for _, aura in ipairs(HAHeroData.Auras(token)) do
+        children[#children + 1] = HADockPanel.Chip{
+            label = aura.label,
+            tooltip = aura.tooltip,
+            icon = aura.icon,
+            iconColor = aura.iconColor,
+            iconHueshift = aura.iconHueshift,
+        }
+    end
+
     --Only the add button present, so this hero has nothing on them.
     if #children == (isDirector and 1 or 0) then
         children[#children + 1] = gui.Label{
@@ -597,9 +609,10 @@ end
 
 --- Build one hero's card.
 --- @param entry table { token=token, hero=character, name=string }
---- @param index number 1-based position, which picks the zebra stripe.
+--- @param stripe string The zebra class; a summon is given its summoner's.
+--- @param isSummon boolean Indents the card and drops the add-to-combat button.
 --- @return Panel
-function HACombatTab.BuildCard(entry, index)
+function HACombatTab.BuildCard(entry, stripe, isSummon)
     local token = entry.token
 
     --Set while a damage or heal box is up, so a token update does not rebuild
@@ -619,7 +632,7 @@ function HACombatTab.BuildCard(entry, index)
         local recoveryAmount, recoveriesLeft, recoveriesMax = HAHeroData.Recoveries(hero)
         local speed, restricted, currentSpeed = HAHeroData.Speed(hero)
         local moveType, altitude = HAHeroData.Movement(token)
-        local heroicIcon, heroicName, heroicValue = HAHeroData.HeroicResource(hero)
+        local heroicIcon, heroicName, heroicValue = HAHeroData.HeroicResource(token)
 
         local statChildren = {
             StatGroup("Recoveries", {
@@ -686,7 +699,7 @@ function HACombatTab.BuildCard(entry, index)
                     },
                 },
                 BuildHealthBar(token, health, SetEntryOpen),
-                dmhub.isDM and BuildAddToCombatButton(token) or nil,
+                (dmhub.isDM and not isSummon) and BuildAddToCombatButton(token) or nil,
             },
 
             BuildResistancesRow(hero),
@@ -700,10 +713,9 @@ function HACombatTab.BuildCard(entry, index)
         }
     end
 
-    local stripe = index % 2 == 0 and "ha-card-even" or "ha-card-odd"
 
     return gui.Panel{
-        classes = {"ha-card", stripe},
+        classes = {"ha-card", stripe, isSummon and "ha-card-summon" or nil},
         --Inline: the active theme rounds panels by default, which would bow the
         --hairline the cards are separated by.
         cornerRadius = 0,
@@ -740,7 +752,18 @@ function HACombatTab.BuildCards()
 
     local cards = {}
     for i, entry in ipairs(entries) do
-        cards[#cards + 1] = HACombatTab.BuildCard(entry, i)
+        local stripe = i % 2 == 0 and "ha-card-even" or "ha-card-odd"
+        cards[#cards + 1] = HACombatTab.BuildCard(entry, stripe, false)
+
+        --Directly under their summoner and on the same stripe, so the group
+        --reads as one block rather than restarting the zebra mid-hero.
+        for _, summon in ipairs(HAHeroData.SummonsFor(entry.token)) do
+            cards[#cards + 1] = HACombatTab.BuildCard({
+                token = summon,
+                hero = summon.properties,
+                name = summon.name or "Unknown",
+            }, stripe, true)
+        end
     end
     return cards
 end

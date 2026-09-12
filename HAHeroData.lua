@@ -137,6 +137,25 @@ function HAHeroData.CollectByFilter(filterId)
     return entries
 end
 
+--- The creatures a hero has summoned, alphabetical. Map-scoped: a summon that
+--- is not placed is not in play.
+--- @param token token The summoner's token.
+--- @return table tokens
+function HAHeroData.SummonsFor(token)
+    local result = {}
+    for _, other in ipairs(dmhub.allTokens) do
+        if other.summonerid == token.charid then
+            result[#result + 1] = other
+        end
+    end
+
+    table.sort(result, function(a, b)
+        return string.lower(a.name or "") < string.lower(b.name or "")
+    end)
+
+    return result
+end
+
 --- Shorten a hero name for a narrow card, with an ASCII ellipsis.
 --- @param name string|nil The hero name.
 --- @param maxChars number|nil Cap, defaulting to HAConstants.nameMaxChars.
@@ -330,14 +349,28 @@ function HAHeroData.Surges(hero)
     return tostring(hero:GetAvailableSurges())
 end
 
---- The hero's class heroic resource: what it looks like, what it is called, and
---- how much they have.
---- @param hero character The hero to read.
---- @return string icon The class's heroic resource glyph.
+--- The heroic resource: what it looks like, what it is called, and how much
+--- they have.
+---
+--- The glyph comes off a class, and a summon has no class of its own, so it
+--- takes its summoner's. The name and the amount are still the summon's own --
+--- it already reports the summoner's resource by name.
+--- @param token token The token to read.
+--- @return string icon The heroic resource glyph.
 --- @return string name What the class calls it.
 --- @return string value The amount, or HAConstants.notInCombat out of combat.
-function HAHeroData.HeroicResource(hero)
-    local classInfo = hero:IsHero() and hero:GetClass() or nil
+function HAHeroData.HeroicResource(token)
+    local hero = token.properties
+
+    local iconSource = hero
+    if not hero:IsHero() and token.summonerid ~= nil then
+        local summoner = dmhub.GetTokenById(token.summonerid)
+        if summoner ~= nil and summoner.properties ~= nil then
+            iconSource = summoner.properties
+        end
+    end
+
+    local classInfo = iconSource:IsHero() and iconSource:GetClass() or nil
     local icon = HAConstants.iconPlaceholder
     if classInfo ~= nil and classInfo ~= false then
         icon = classInfo:try_get("heroicResourceIcon", HAConstants.iconPlaceholder)
@@ -418,9 +451,43 @@ function HAHeroData.Movement(token)
     return moveType, token.floorAltitude
 end
 
---- Gather a hero's conditions as plain data, ready for our own chips. Auras and
---- status effects are deliberately left out. The label and tooltip come from the
---- character panel's own text builders so durations and riders read identically.
+--- The auras currently affecting a hero, alphabetical.
+---
+--- Auras the hero emits themselves come back from GetAurasAffecting too, and
+--- are filtered out here the way the character panel filters them. Auras they
+--- emit onto others are a separate list the character panel builds with a
+--- file-local helper no other mod can reach, so they are not shown.
+--- @param token token The hero's token.
+--- @return table[] entries { label, tooltip, icon, iconColor, iconHueshift }
+function HAHeroData.Auras(token)
+    local result = {}
+
+    for _, auraInfo in ipairs(token.properties:GetAurasAffecting(token) or {}) do
+        local auraInstance = auraInfo.auraInstance
+        if rawget(auraInstance, "casterid") ~= token.charid then
+            local aura = auraInstance.aura
+            local display = aura.display or {}
+            result[#result + 1] = {
+                label = string.format("%s (Aura)", aura.name),
+                tooltip = string.format("<b>%s</b>: %s", aura.name, aura:GetDescription()),
+                icon = aura.iconid,
+                iconColor = display.bgcolor,
+                iconHueshift = display.hueshift,
+            }
+        end
+    end
+
+    table.sort(result, function(a, b)
+        return string.lower(a.label) < string.lower(b.label)
+    end)
+
+    return result
+end
+
+--- Gather a hero's conditions as plain data, ready for our own chips. Status
+--- effects are deliberately left out; auras come from HAHeroData.Auras. The
+--- label and tooltip come from the character panel's own text builders so
+--- durations and riders read identically.
 --- @param hero character The hero to read.
 --- @return table[] entries { kind, key, label, tooltip, icon, iconColor, iconHueshift, canSetCaster }, alphabetical.
 function HAHeroData.Conditions(hero)

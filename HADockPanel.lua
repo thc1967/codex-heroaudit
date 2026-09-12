@@ -94,6 +94,11 @@ local function RosterSignature()
     local ids = {}
     for _, entry in ipairs(HAHeroData.CollectCombatHeroes()) do
         ids[#ids + 1] = entry.token.charid
+        --Summons too, or one being placed or dismissed would not bring the
+        --card list back.
+        for _, summon in ipairs(HAHeroData.SummonsFor(entry.token)) do
+            ids[#ids + 1] = summon.charid
+        end
     end
     return table.concat(ids, ",")
 end
