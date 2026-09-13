@@ -176,6 +176,24 @@ HAConstants.styles = {
         valign = "center",
         hmargin = 2,
     },
+    --The right half of the characteristics row, with a hero's resources
+    --centered in it as one left-packed run.
+    {
+        selectors = {"ha-stat-half"},
+        width = "50%",
+        height = "auto",
+        flow = "horizontal",
+        halign = "right",
+        valign = "center",
+    },
+    {
+        selectors = {"ha-stat-center"},
+        width = "auto",
+        height = "auto",
+        flow = "horizontal",
+        halign = "center",
+        valign = "center",
+    },
     {
         selectors = {"ha-section"},
         width = "100%",

@@ -17,8 +17,9 @@ local function OpenRequestRolls(token, skillid)
     LaunchablePanel.LaunchPanelByName("Request Rolls", { skills = {skillid} })
 end
 
---- Click a skill chip to ask for that roll. One hero goes straight through;
---- several offer a menu of who to ask first.
+--- Click a skill chip to ask for that roll. Only heroes on the map can be
+--- asked, since the dialog draws on the map selection: one goes straight
+--- through, several offer a menu of who to ask first, and none does nothing.
 --- @param element Panel The chip, which hosts the popup.
 --- @param bucket table An HAHeroData.Aggregate bucket.
 local function RequestSkillRoll(element, bucket)
@@ -27,13 +28,29 @@ local function RequestSkillRoll(element, bucket)
         return
     end
 
-    if #bucket.members == 1 then
-        OpenRequestRolls(bucket.members[1].token, skillid)
+    local onMap = {}
+    for _, token in ipairs(dmhub.allTokens) do
+        onMap[token.charid] = true
+    end
+
+    local members = {}
+    for _, member in ipairs(bucket.members) do
+        if onMap[member.token.charid] then
+            members[#members + 1] = member
+        end
+    end
+
+    if #members == 0 then
+        return
+    end
+
+    if #members == 1 then
+        OpenRequestRolls(members[1].token, skillid)
         return
     end
 
     local entries = {}
-    for _, member in ipairs(bucket.members) do
+    for _, member in ipairs(members) do
         local token = member.token
         entries[#entries + 1] = {
             text = member.name,

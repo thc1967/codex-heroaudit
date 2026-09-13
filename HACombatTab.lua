@@ -138,6 +138,17 @@ end
 --- hairline that separates cards falls below the whole group and the summons
 --- read as belonging to the hero rather than merely following them.
 ---
+--- Open Request Rolls for one hero with one characteristic already chosen.
+--- The dialog seeds its token pool from the map selection and takes
+--- characteristics as a set keyed by id, so pre-selecting means setting the
+--- selection and passing that set. No skill: the dialog leaves it unset.
+--- @param token token The hero to request the roll from.
+--- @param attrId string The characteristic's id in creature.attributesInfo.
+local function RequestCharacteristicRoll(token, attrId)
+    dmhub.selectedTokens = {token}
+    LaunchablePanel.LaunchPanelByName("Request Rolls", { characteristics = { [attrId] = true } })
+end
+
 --- A stat value the Director presses to set, through the card's form. Reads
 --- as a plain value otherwise, and for players.
 --- @param token token The hero the card is for, which keys the card's form.
@@ -179,23 +190,24 @@ function HACombatTab.CreateCard()
     end
 
     --- The rows that make up one creature's reading, hero or summon alike.
+    --- A companion reads as its beastheart does, recoveries, surges and
+    --- heroic resource included, since it draws on the beastheart's; any
+    --- other summon has none of the three.
     --- @param token token The creature to read.
     --- @param isSummon boolean Drops the add-to-combat button.
     --- @return Panel[] rows
     local function BuildCreatureRows(token, isSummon)
         local creatureProps = token.properties
         local health = THCUtils.Health(creatureProps)
+        local heroLike = not isSummon or creatureProps:IsCompanion()
 
-        local statChildren = {}
-
-        --A summon has none of the three: no recoveries, no surges, and its
-        --heroic resource is its summoner's rather than its own.
-        if not isSummon then
+        local resources = nil
+        if heroLike then
             local recoveryAmount, recoveriesLeft, recoveriesMax = HAHeroData.Recoveries(creatureProps)
             local heroicIcon, heroicName, heroicValue = HAHeroData.HeroicResource(token)
             local inCombat = THCUtils.InCombat()
 
-            statChildren = {
+            resources = {
                 THCWidgets.StatGroup("Recoveries", {
                     gui.Button{
                         classes = {
@@ -204,6 +216,7 @@ function HACombatTab.CreateCard()
                             HAHeroData.RecoveryStatus(recoveriesLeft, recoveriesMax),
                         },
                         icon = HAConstants.iconRecoveries,
+                        linger = THCWidgets.Tooltip("Use a recovery"),
                         press = function(element)
                             if not dmhub.isDM then
                                 return
@@ -247,12 +260,16 @@ function HACombatTab.CreateCard()
         end
 
         --Speed, disengage, stability and altitude read the same for anything
-        --with a token, so they come whole from THCWidgets.
-        for _, group in ipairs(THCWidgets.MovementStats(token)) do
-            statChildren[#statChildren + 1] = group
-        end
+        --with a token, so they come whole from THCWidgets. A summon has no
+        --stat row of its own, so its movement runs on after the
+        --characteristics instead.
+        local movement = THCWidgets.MovementStats(token)
 
-        return {
+        local characteristics = THCWidgets.CharacteristicsRow(creatureProps, (not heroLike) and movement or nil, dmhub.isDM and function(attrId)
+            RequestCharacteristicRoll(token, attrId)
+        end or nil)
+
+        local rows = {
             gui.Panel{
                 classes = {"thc-card-row"},
                 gui.Panel{
@@ -270,18 +287,33 @@ function HACombatTab.CreateCard()
                 THCWidgets.HealthBar(token, health),
                 (dmhub.isDM and not isSummon) and THCWidgets.AddToCombatButton(token) or nil,
             },
-
-            THCWidgets.ResistancesRow(creatureProps),
-
-            THCWidgets.CharacteristicsRow(creatureProps),
-
-            gui.Panel{
-                classes = {"thc-card-row"},
-                children = statChildren,
-            },
-
-            THCWidgets.ConditionsRow(token),
         }
+
+        --A hero's characteristics share their row with the resources, centered
+        --in its right half; then movement has a row of its own.
+        if not heroLike then
+            rows[#rows + 1] = characteristics
+        else
+            rows[#rows + 1] = gui.Panel{
+                classes = {"thc-card-row"},
+                characteristics,
+                gui.Panel{
+                    classes = {"ha-stat-half"},
+                    gui.Panel{
+                        classes = {"ha-stat-center"},
+                        children = resources,
+                    },
+                },
+            }
+            rows[#rows + 1] = gui.Panel{
+                classes = {"thc-card-row"},
+                children = movement,
+            }
+        end
+
+        rows[#rows + 1] = THCWidgets.ResistancesRow(creatureProps)
+        rows[#rows + 1] = THCWidgets.ConditionsRow(token)
+        return rows
     end
 
     --- @param summon token
