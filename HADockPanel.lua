@@ -1,89 +1,9 @@
 local mod = dmhub.GetModLoading()
 
 --- The dockable Hero Audit panel: a tab bar over the Combat and Exploration
---- tabs, and the chip both tabs are built from.
+--- tabs.
 --- @class HADockPanel: GameType
 HADockPanel = RegisterGameType("HADockPanel")
-
---- A small bordered pill: optional icon, a label, and a remove glyph when the
---- caller supplies a handler. Shared by conditions, languages and skills so all
---- three read as one control.
---- @param args table { label, tooltip?, icon?, iconColor?, iconHueshift?, onRemove?, onPress?, extraClasses?, extraChildren? }
---- @return Panel
-function HADockPanel.Chip(args)
-    local children = {}
-
-    if args.icon ~= nil then
-        children[#children + 1] = gui.Panel{
-            classes = {"ha-chip-icon"},
-            bgimage = args.icon,
-            bgcolor = args.iconColor or "white",
-            hueshift = args.iconHueshift or 0,
-        }
-    end
-
-    children[#children + 1] = gui.Label{
-        classes = {"ha-chip-label", "sizeXxs"},
-        text = args.label,
-    }
-
-    --Between the label and the remove glyph, so removing stays the rightmost
-    --thing on every chip.
-    for _, child in ipairs(args.extraChildren or {}) do
-        children[#children + 1] = child
-    end
-
-    if args.onRemove ~= nil then
-        children[#children + 1] = gui.Panel{
-            classes = {"ha-chip-remove"},
-            hoverCursor = "pressbutton",
-            press = function()
-                args.onRemove()
-            end,
-            linger = function(element)
-                gui.Tooltip{
-                    text = "Remove",
-                    fontSize = HAConstants.tooltipFontSize,
-                }(element)
-            end,
-
-            gui.Label{
-                classes = {"ha-chip-remove-x", "sizeXxs"},
-                text = "X",
-            },
-        }
-    end
-
-    local classes = {"ha-chip", "bordered"}
-    for _, class in ipairs(args.extraClasses or {}) do
-        classes[#classes + 1] = class
-    end
-
-    if args.onPress ~= nil then
-        classes[#classes + 1] = "hoverable"
-    end
-
-    return gui.Panel{
-        classes = classes,
-        --Inline: the active theme rounds panels by default, and a rule of ours
-        --only ties with it.
-        cornerRadius = 0,
-
-        hoverCursor = args.onPress ~= nil and "pressbutton" or nil,
-        press = args.onPress ~= nil and function(element)
-            args.onPress(element)
-        end or nil,
-        --Every chip tooltip is the small one: a condition's description is the
-        --longest text on the panel and at body size it swamps the window.
-        linger = args.tooltip ~= nil and function(element)
-            gui.Tooltip{
-                text = args.tooltip,
-                fontSize = HAConstants.tooltipFontSize,
-            }(element)
-        end or nil,
-        children = children,
-    }
-end
 
 --- Which heroes the combat tab is showing, as a comparable string, so it is
 --- only rebuilt when that set changes rather than on every object update. It
@@ -110,16 +30,19 @@ function HADockPanel.Build()
     local m_roster = RosterSignature()
     local m_dirty = false
 
-    local combatBody = gui.Panel{
-        classes = {"ha-tabbody"},
-        vscroll = true,
-        refreshData = function(element)
-            element.children = HACombatTab.BuildCards()
-        end,
-        children = HACombatTab.BuildCards(),
-    }
+    --The cards are assembled from THCWidgets, so their geometry rides in from
+    --there and is spliced ahead of ours.
+    local styles = THCWidgets.Styles(
+        THCWidgets.chipStyles,
+        THCWidgets.statStyles,
+        THCWidgets.healthStyles,
+        THCWidgets.headerStyles,
+        THCWidgets.cardStyles,
+        HAConstants.styles)
 
-    --Built whole by the tab, which owns the filter its sections are read under.
+    --Both tabs are built whole by their own file: the combat tab owns the card
+    --pool, and the exploration tab the filter its sections are read under.
+    local combatBody = HACombatTab.Build()
     local explorationBody = HAExplorationTab.Build()
 
     --Assigned below; the press handlers close over them and only run later.
@@ -169,7 +92,7 @@ function HADockPanel.Build()
 
     return gui.Panel{
         classes = {"ha-root"},
-        styles = ThemeEngine.MergeStyles(HAConstants.styles),
+        styles = ThemeEngine.MergeStyles(styles),
 
         --Stamina and conditions arrive through each card's own token monitor.
         --This one is for the aggregates, which no single token owns. Debounced,
@@ -212,7 +135,7 @@ function HADockPanel.Build()
         create = function(element)
             themeSub = ThemeEngine.OnThemeChanged(mod, function()
                 if element.valid then
-                    element.styles = ThemeEngine.MergeStyles(HAConstants.styles)
+                    element.styles = ThemeEngine.MergeStyles(styles)
                 end
             end)
             ApplyTab()

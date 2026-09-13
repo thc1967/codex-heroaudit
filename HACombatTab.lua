@@ -5,43 +5,6 @@ local mod = dmhub.GetModLoading()
 --- @class HACombatTab: GameType
 HACombatTab = RegisterGameType("HACombatTab")
 
---- A small glyph beside a number.
---- @param icon string Image path.
---- @return Panel
-local function StatIcon(icon)
-    return gui.Panel{
-        classes = {"ha-stat-icon", "bgInverse"},
-        bgimage = icon,
-    }
-end
-
---- @param text string The value to print.
---- @return Panel
-local function StatValue(text)
-    return gui.Label{
-        classes = {"ha-stat-value", "sizeXs"},
-        text = text,
-    }
-end
-
---- One stat: its glyph, its value, and a tooltip naming it. The row is icons
---- and bare numbers, so the tooltip is the only thing that says which is which.
---- @param tooltip string What this stat is called.
---- @param children Panel[] The glyph and value panels, in order.
---- @return Panel
-local function StatGroup(tooltip, children)
-    return gui.Panel{
-        classes = {"ha-stat-group"},
-        linger = function(element)
-            gui.Tooltip{
-                text = tooltip,
-                fontSize = HAConstants.tooltipFontSize,
-            }(element)
-        end,
-        children = children,
-    }
-end
-
 --- Out of their own recoveries and short of hero tokens, a hero can draw on a
 --- bonded ally's. Both writes share one groupid, so healing here and spending
 --- there undo as a single step.
@@ -148,622 +111,411 @@ local function SpendRecovery(element, token)
     }
 end
 
---- The compact stamina bar. Rebuilt rather than reusing TacPanel.HealthBar,
---- which is fixed at 90% width with its own hover-reveal adjust controls.
+--- Which heroes have their summons folded away, keyed by the summoner's charid.
+--- Kept off the card, which outlives the hero bound to it. Absent means
+--- expanded.
+local m_summonsCollapsed = {}
+
+--- @param token token|nil The summoner.
+--- @return boolean
+function HACombatTab.SummonsCollapsed(token)
+    return token ~= nil and m_summonsCollapsed[token.charid] == true
+end
+
+--- @param token token|nil The summoner.
+function HACombatTab.ToggleSummons(token)
+    if token == nil then
+        return
+    end
+    m_summonsCollapsed[token.charid] = not m_summonsCollapsed[token.charid]
+end
+
+--- One hero card, built with no hero in it. The list hands it one through the
+--- "bindHero" event and hands it nil when there are more cards than heroes, at
+--- which point it parks itself rather than being destroyed.
 ---
---- A Director gets a minus and a plus tucked into the ends of the bar; either
---- opens a box over the reading that applies damage or healing on enter or on
---- clicking away. `setEntryOpen` tells the card to hold off rebuilding while
---- that box is up, or a token update would delete it under the caret.
---- @param token token The hero's token.
---- @param health table As produced by HAHeroData.Health.
---- @param setEntryOpen fun(open: boolean) Reports whether an edit is in progress.
---- @return Panel
-local function BuildHealthBar(token, health, setEntryOpen)
-    local stateClass = nil
-    local borderClass = "borderSuccess"
-    if health.dying or health.dead then
-        stateClass = "ha-dying"
-        borderClass = "borderDanger"
-    elseif health.winded then
-        stateClass = "ha-winded"
-        borderClass = "borderWarning"
-    end
-
-    --"fg", like the character panel's reading: the fill already carries the
-    --status colour, so anything drawn over it stays neutral.
-    --
-    --bgimage/clear: a label is not a hit target without a background, so the
-    --history would never be reachable. Kept clear so nothing changes visually.
-    local label = gui.Label{
-        classes = {"ha-health-label", "sizeXxs", "bold", "fg"},
-        floating = true,
-        bgimage = true,
-        bgcolor = "clear",
-        text = health.text,
-
-        linger = function(element)
-            if not token.valid or token.properties == nil then
-                return
-            end
-
-            local children = {
-                gui.Label{
-                    classes = {"ha-history-row", "bold"},
-                    text = "Recent changes to stamina",
-                },
-            }
-
-            local rows = HAHeroData.StaminaHistory(token.properties)
-            if #rows == 0 then
-                children[1].text = "No changes recorded for stamina"
-            end
-
-            --Muted where there is no direction to report: the first row has
-            --nothing before it to compare against, and a set that did not move
-            --the number is neither damage nor healing.
-            for _, row in ipairs(rows) do
-                children[#children + 1] = gui.Label{
-                    classes = {"ha-history-row", row.status or "fgMuted"},
-                    text = row.text,
-                }
-            end
-
-            element.tooltip = gui.TooltipFrame(
-                gui.Panel{
-                    classes = {"ha-history"},
-                    styles = ThemeEngine.MergeStyles(HAConstants.historyStyles),
-                    children = children,
-                },
-                { halign = "left", valign = "top" }
-            )
-        end,
-    }
-
-    local children = {
-        gui.Panel{
-            classes = {"fillBarFill", "ha-health-fill", stateClass},
-            width = string.format("%f%%-2", health.ratio * 100),
-            cornerRadius = 0,
-        },
-        label,
-    }
-
-    if dmhub.isDM then
-        local m_mode = nil
-        local m_focused = false
-        local entryInput
-
-        local function CloseEntry()
-            if m_mode == nil then
-                return
-            end
-            m_mode = nil
-            setEntryOpen(false)
-            entryInput:SetClass("collapsed", true)
-            label:SetClass("collapsed", false)
-        end
-
-        local function ApplyValue(mode, text)
-            local amount = tonum(text, 0)
-            if mode == nil or amount <= 0 then
-                return
-            end
-            if not token.valid or token.properties == nil then
-                return
-            end
-
-            if mode == "harm" then
-                token:ModifyProperties{
-                    description = "Apply Damage",
-                    execute = function()
-                        --The string, not the number: TakeDamage takes a formula.
-                        token.properties:TakeDamage(text)
-                    end,
-                }
-            else
-                token:ModifyProperties{
-                    description = "Apply Healing",
-                    execute = function()
-                        token.properties:Heal(amount)
-                    end,
-                }
-            end
-        end
-
-        local function OpenEntry(mode)
-            m_mode = mode
-            setEntryOpen(true)
-            entryInput.text = ""
-            entryInput:SetClass("collapsed", false)
-            label:SetClass("collapsed", true)
-
-            --A frame later: the field is still collapsed as far as the engine
-            --is concerned right now, so focusing it here does not stick.
-            m_focused = false
-            dmhub.Schedule(0.01, function()
-                if mod.unloaded then return end
-                if m_mode ~= nil and entryInput.valid then
-                    gui.SetFocus(entryInput)
-                end
-            end)
-        end
-
-        entryInput = gui.Input{
-            classes = {"ha-health-entry", "sizeXxs", "collapsed"},
-            text = "",
-            --Blank, not the default "Enter text...", which is far wider than
-            --the field and would spill across the bar.
-            placeholderText = "",
-            characterLimit = 5,
-            selectAllOnFocus = true,
-            hoverCursor = "text",
-            floating = true,
-            escapePriority = EscapePriority.EXIT_DIALOG,
-
-            escape = function()
-                CloseEntry()
-                gui.SetFocus(nil)
-            end,
-
-            focus = function()
-                m_focused = true
-            end,
-
-            defocus = function()
-                --Only a real focus loss closes the box: the defocus that fires
-                --while it is still opening would shut it again immediately.
-                if not m_focused then return end
-                m_focused = false
-
-                --Deferred a frame, because clicking INSIDE the box to move the
-                --caret defocuses and refocuses, which would close it out from
-                --under the pointer.
-                dmhub.Schedule(0.01, function()
-                    if mod.unloaded then return end
-                    if not entryInput.valid then return end
-                    if m_focused or m_mode == nil then return end
-                    CloseEntry()
-                end)
-            end,
-
-            change = function(element)
-                --Read before closing: change fires on focus loss too, and
-                --closing clears the mode the value needs.
-                local mode = m_mode
-                local text = element.text
-                CloseEntry()
-                ApplyValue(mode, text)
-            end,
-        }
-
-        --Neither is offered where it would do nothing: no damage to a hero who
-        --is already dead, no healing for one already whole. Built only when
-        --wanted, not built and then withheld -- an unparented panel warns.
-        if not health.dead then
-            children[#children + 1] = gui.Button{
-                classes = {"ha-health-adjust", "ha-health-left", "sizeXxs", "ha-tint-fg"},
-                icon = HAConstants.iconHarm,
-                floating = true,
-                press = function()
-                    OpenEntry("harm")
-                end,
-                linger = function(element)
-                    gui.Tooltip{
-                        text = "Apply Damage",
-                        fontSize = HAConstants.tooltipFontSize,
-                    }(element)
-                end,
-            }
-        end
-
-        if health.current < health.max then
-            children[#children + 1] = gui.Button{
-                classes = {"ha-health-adjust", "ha-health-right", "sizeXxs", "ha-tint-fg"},
-                icon = HAConstants.iconHeal,
-                floating = true,
-                press = function()
-                    OpenEntry("heal")
-                end,
-                linger = function(element)
-                    gui.Tooltip{
-                        text = "Apply Healing",
-                        fontSize = HAConstants.tooltipFontSize,
-                    }(element)
-                end,
-            }
-        end
-
-        children[#children + 1] = entryInput
-    end
-
-    return gui.Panel{
-        classes = {"ha-health", "bordered", borderClass},
-        --The frame is the border; a filled surface behind the bar would hide
-        --where the fill ends.
-        bgcolor = "clear",
-        --Inline, on both the frame and the fill: the active theme rounds panels
-        --by default, and a rule of ours only ties with it.
-        cornerRadius = 0,
-        children = children,
-    }
-end
-
---- Pull one hero into a fight already in progress. Director-only, and only for
---- a hero currently sitting it out.
+--- A hero's summons are built INSIDE their card rather than beside it, so the
+--- hairline that separates cards falls below the whole group and the summons
+--- read as belonging to the hero rather than merely following them.
 ---
---- The engine's rollinitiative command takes no token and acts on the current
---- selection, so the only way to aim it at one hero is to select them. The
---- Director's own selection is saved and put back afterwards, on a scheduled
---- event rather than inline: the command may not read the selection until the
---- frame settles, and restoring too early would aim it at nobody.
----
---- Visibility is polled rather than rebuilt with the card: `_tmp_initiativeStatus`
---- is not something the token monitor reports, so joining or leaving a fight
---- leaves the card untouched and the sword would sit there having already
---- worked. "danger", not "bgDanger" -- the latter sets bgimage and swallows
---- the icon.
---- @param token token The hero's token.
+--- A stat value the Director presses to set, through the card's form. Reads
+--- as a plain value otherwise, and for players.
+--- @param token token The hero the card is for, which keys the card's form.
+--- @param text string The value as printed.
+--- @param editable boolean Whether setting it makes sense right now.
+--- @param entry {label: string, initial: string, apply: fun(text: string)} What the form opens with.
 --- @return Panel
-local function BuildAddToCombatButton(token)
-    return gui.Button{
-        classes = {"ha-addcombat", "sizeXs", "ha-tint-danger", "withDanger", "collapsed"},
-        icon = HAConstants.iconAddToCombat,
-
-        thinkTime = 0.5,
-        think = function(element)
-            element:SetClass("collapsed", not HAHeroData.CanAddToCombat(token.properties))
-        end,
-        create = function(element)
-            element:FireEvent("think")
-        end,
-
-        linger = function(element)
-            gui.Tooltip{
-                text = "Add to Combat",
-                fontSize = HAConstants.tooltipFontSize,
-            }(element)
-        end,
-        press = function(element)
-            local restore = {}
-            for _, selected in ipairs(dmhub.selectedTokens) do
-                restore[#restore + 1] = selected
+local function EditableStat(token, text, editable, entry)
+    editable = editable and dmhub.isDM
+    return gui.Label{
+        classes = {"thc-stat-value", "sizeXs"},
+        text = text,
+        hoverCursor = editable and "pressbutton" or nil,
+        linger = editable and THCWidgets.Tooltip("Set " .. entry.label) or nil,
+        press = editable and function(element)
+            local host = element:FindParentWithClass(THCWidgets.overlayHostClass)
+            if host ~= nil then
+                host:FireEventTree("openOverlay", token, entry)
             end
-            element.data.restoreSelection = restore
-
-            dmhub.selectedTokens = {token}
-            Commands.rollinitiative()
-
-            element:ScheduleEvent("restoreSelection", 0.1)
-        end,
-        restoreSelection = function(element)
-            dmhub.selectedTokens = element.data.restoreSelection or {}
-            element.data.restoreSelection = nil
-        end,
+        end or nil,
     }
 end
 
---- Point a caster-tracking condition at whoever inflicted it, by running the
---- standard SetConditionCaster ability so the Director picks the creature on
---- the map. The invoking latch mirrors the character panel's: the ability is
---- a prompt, and a second press while the first is still resolving would stack
---- two pickers on one condition.
---- @param token token The hero carrying the condition.
---- @param condid string The condition to set a caster on.
+--- Pooled rather than rebuilt because the card owns a text field: the Director
+--- typing a damage amount is holding a panel that a rebuild would delete under
+--- the caret. A card that outlives its refresh makes that structural rather
+--- than something the refresh has to tiptoe around.
 --- @return Panel
-local function BuildSetCasterButton(token, condid)
-    return gui.Button{
-        classes = {"ha-chip-setcaster", "sizeXxs"},
-        icon = HAConstants.iconSetCaster,
-        data = { invoking = false, invokeReady = false },
+function HACombatTab.CreateCard()
+    local m_token = nil
+    local m_summons = {}
 
-        press = function(element)
-            if element.data.invoking or gamehud.actionBarPanel.data.IsCastingSpell() then
-                return
-            end
-            element.data.invoking = true
-            element.thinkTime = 0.1
-
-            local ability = DeepCopy(MCDMUtils.GetStandardAbility("SetConditionCaster"))
-            ability.behaviors[1].condid = condid
-            ability.OnFinishCast = function()
-                element.data.invoking = false
-                element.thinkTime = nil
-            end
-            ActivatedAbilityInvokeAbilityBehavior.ExecuteInvoke(token, ability, token, "prompt", {}, {})
-        end,
-
-        think = function(element)
-            if element.data.invoking and element.data.invokeReady then
-                if not gamehud.actionBarPanel.data.IsCastingSpell()
-                    and not gamehud.rollDialog.data.IsShown() then
-                    element.data.invoking = false
-                    element.data.invokeReady = false
-                    element.thinkTime = nil
-                end
-            elseif element.data.invoking then
-                element.data.invokeReady = true
-            end
-        end,
-
-        linger = function(element)
-            gui.Tooltip{
-                text = "Set Caster",
-                fontSize = HAConstants.tooltipFontSize,
-            }(element)
-        end,
-    }
-end
-
---- Weaknesses then immunities as chips, tinted to tell the two apart. The whole
---- row collapses when the hero has neither.
---- @param hero character The hero to read.
---- @return Panel
-local function BuildResistancesRow(hero)
-    local entries = HAHeroData.Resistances(hero)
-
-    local chips = {}
-    for _, resistance in ipairs(entries) do
-        chips[#chips + 1] = HADockPanel.Chip{
-            label = resistance.label,
-            --Outlined rather than filled: a row of solid blocks shouts louder
-            --than the conditions beneath it, which matter more.
-            extraClasses = resistance.weakness
-                and {"borderWarning"}
-                or {"borderSuccess"},
-        }
-    end
-
-    return gui.Panel{
-        classes = {"ha-chips", #chips == 0 and "collapsed" or nil},
-        wrap = true,
-        children = chips,
-    }
-end
-
---- The conditions strip: an add button for Directors, then one chip each.
---- Players see the chips without the add button or the remove glyphs.
---- @param token token The hero's token.
---- @return Panel
-local function BuildConditionsRow(token)
-    local isDirector = dmhub.isDM
-
-    local children = {}
-
-    if isDirector then
-        children[#children + 1] = gui.Button{
-            classes = {"addButton", "sizeXs", "ha-chip-add"},
-            press = function(element)
-                TacPanel.AddConditionMenu{
-                    tokens = {token},
-                    button = element,
-                }
-            end,
-            linger = function(element)
-                gui.Tooltip("Add a condition")(element)
-            end,
-        }
-    end
-
-    for _, cond in ipairs(HAHeroData.Conditions(token.properties)) do
-        local onRemove = nil
-        if isDirector then
-            onRemove = function()
-                token:ModifyProperties{
-                    description = "Remove Condition",
-                    execute = function()
-                        if cond.kind == "custom" then
-                            local customConditions = token.properties:get_or_add("customConditions", {})
-                            customConditions[cond.key] = nil
-                        else
-                            token.properties:InflictCondition(cond.key, {purge = true})
-                        end
-                    end,
-                }
-            end
-        end
-
-        local extraChildren = nil
-        if isDirector and cond.canSetCaster then
-            extraChildren = {BuildSetCasterButton(token, cond.key)}
-        end
-
-        children[#children + 1] = HADockPanel.Chip{
-            label = cond.label,
-            tooltip = cond.tooltip,
-            icon = cond.icon,
-            iconColor = cond.iconColor,
-            iconHueshift = cond.iconHueshift,
-            onRemove = onRemove,
-            extraChildren = extraChildren,
-        }
-    end
-
-    --After the conditions, and never removable: an aura belongs to whatever is
-    --emitting it, not to the hero standing in it.
-    for _, aura in ipairs(HAHeroData.Auras(token)) do
-        children[#children + 1] = HADockPanel.Chip{
-            label = aura.label,
-            tooltip = aura.tooltip,
-            icon = aura.icon,
-            iconColor = aura.iconColor,
-            iconHueshift = aura.iconHueshift,
-        }
-    end
-
-    --Only the add button present, so this hero has nothing on them.
-    if #children == (isDirector and 1 or 0) then
-        children[#children + 1] = gui.Label{
-            classes = {"ha-chip-label", "sizeXxs", "fgMuted"},
-            italics = true,
-            text = "No conditions",
-        }
-    end
-
-    return gui.Panel{
-        classes = {"ha-chips"},
-        wrap = true,
-        children = children,
-    }
-end
-
---- Build one hero's card.
---- @param entry table { token=token, hero=character, name=string }
---- @param stripe string The zebra class; a summon is given its summoner's.
---- @param isSummon boolean Indents the card and drops the add-to-combat button.
---- @return Panel
-function HACombatTab.BuildCard(entry, stripe, isSummon)
-    local token = entry.token
-
-    --Set while a damage or heal box is up, so a token update does not rebuild
-    --the card and delete the field under the caret.
+    --Set while a damage or heal box is up, on the hero's bar or a summon's, so
+    --a token update does not rebuild the rows and delete the field under the
+    --caret. Shared across the group because they rebuild together.
     local m_entryOpen = false
     local function SetEntryOpen(open)
         m_entryOpen = open
     end
 
-    --- The card's three rows, read fresh. Rebuilt whole rather than bound
-    --- field by field: they are short, and every value is read together.
+    --- The rows that make up one creature's reading, hero or summon alike.
+    --- @param token token The creature to read.
+    --- @param isSummon boolean Drops the add-to-combat button.
     --- @return Panel[] rows
-    local function BuildRows()
-        local hero = token.properties
+    local function BuildCreatureRows(token, isSummon)
+        local creatureProps = token.properties
+        local health = THCUtils.Health(creatureProps)
 
-        local health = HAHeroData.Health(hero)
-        local recoveryAmount, recoveriesLeft, recoveriesMax = HAHeroData.Recoveries(hero)
-        local speed, restricted, currentSpeed = HAHeroData.Speed(hero)
-        local moveType, altitude = HAHeroData.Movement(token)
-        local heroicIcon, heroicName, heroicValue = HAHeroData.HeroicResource(token)
+        local statChildren = {}
 
-        local statChildren = {
-            StatGroup("Recoveries", {
-                gui.Button{
-                    classes = {
-                        "ha-stat-button",
-                        "sizeXs",
-                        HAHeroData.RecoveryStatus(recoveriesLeft, recoveriesMax),
+        --A summon has none of the three: no recoveries, no surges, and its
+        --heroic resource is its summoner's rather than its own.
+        if not isSummon then
+            local recoveryAmount, recoveriesLeft, recoveriesMax = HAHeroData.Recoveries(creatureProps)
+            local heroicIcon, heroicName, heroicValue = HAHeroData.HeroicResource(token)
+            local inCombat = THCUtils.InCombat()
+
+            statChildren = {
+                THCWidgets.StatGroup("Recoveries", {
+                    gui.Button{
+                        classes = {
+                            "ha-stat-button",
+                            "sizeXs",
+                            HAHeroData.RecoveryStatus(recoveriesLeft, recoveriesMax),
+                        },
+                        icon = HAConstants.iconRecoveries,
+                        press = function(element)
+                            if not dmhub.isDM then
+                                return
+                            end
+                            SpendRecovery(element, token)
+                        end,
                     },
-                    icon = HAConstants.iconRecoveries,
-                    press = function(element)
-                        if not dmhub.isDM then
-                            return
-                        end
-                        SpendRecovery(element, token)
-                    end,
-                },
-                StatValue(string.format("+%d", recoveryAmount)),
-                StatValue(string.format(" %d/%d", recoveriesLeft, recoveriesMax)),
-            }),
-            StatGroup("Surges", {
-                StatIcon(HAConstants.iconSurges),
-                StatValue(HAHeroData.Surges(hero)),
-            }),
-            StatGroup(heroicName, {
-                StatIcon(heroicIcon),
-                StatValue(heroicValue),
-            }),
-            StatGroup("Speed", {
-                StatIcon(HAConstants.iconSpeed),
-                StatValue(restricted and string.format("%d (%d)", speed, currentSpeed) or tostring(speed)),
-            }),
-            StatGroup("Disengage", {
-                StatIcon(HAConstants.iconDisengage),
-                StatValue(tostring(HAHeroData.Disengage(hero))),
-            }),
-            StatGroup("Stability", {
-                StatIcon(HAConstants.iconStability),
-                StatValue(tostring(HAHeroData.Stability(hero))),
-            }),
-        }
+                    THCWidgets.StatValue(string.format("+%d", recoveryAmount)),
+                    EditableStat(token, string.format(" %d/%d", recoveriesLeft, recoveriesMax), true, {
+                        label = "# Recoveries",
+                        initial = string.format("%d", recoveriesLeft),
+                        apply = function(text)
+                            HAHeroData.SetRecoveries(token, tonum(text, -1))
+                        end,
+                    }),
+                }),
+                THCWidgets.StatGroup("Surges", {
+                    THCWidgets.StatIcon(HAConstants.iconSurges),
+                    EditableStat(token, HAHeroData.Surges(creatureProps), inCombat, {
+                        label = "Surges",
+                        initial = inCombat and HAHeroData.Surges(creatureProps) or "",
+                        apply = function(text)
+                            HAHeroData.SetSurges(token, tonum(text, -1))
+                        end,
+                    }),
+                }),
+                THCWidgets.StatGroup(heroicName, {
+                    THCWidgets.StatIcon(heroicIcon),
+                    EditableStat(token, heroicValue, inCombat, {
+                        label = heroicName,
+                        initial = inCombat and heroicValue or "",
+                        apply = function(text)
+                            local n = tonum(text, nil)
+                            if n ~= nil then
+                                HAHeroData.SetHeroicResource(token, n)
+                            end
+                        end,
+                    }),
+                }),
+            }
+        end
 
-        --Altitude only; which mode it is comes through the glyph and its tooltip.
-        if moveType ~= nil then
-            statChildren[#statChildren + 1] = StatGroup(moveType.label, {
-                StatIcon(moveType.icon),
-                StatValue(tostring(altitude)),
-            })
+        --Speed, disengage, stability and altitude read the same for anything
+        --with a token, so they come whole from THCWidgets.
+        for _, group in ipairs(THCWidgets.MovementStats(token)) do
+            statChildren[#statChildren + 1] = group
         end
 
         return {
             gui.Panel{
-                classes = {"ha-card-row"},
+                classes = {"thc-card-row"},
                 gui.Panel{
-                    classes = {"ha-card-identity"},
+                    classes = {"thc-card-identity"},
                     gui.CreateTokenImage(token, {
-                        classes = {"ha-card-token"},
+                        classes = {"thc-card-token"},
                         halign = "left",
                         valign = "center",
                     }),
                     gui.Label{
-                        classes = {"ha-card-name", "bold", "sizeXs"},
-                        text = HAHeroData.TruncateName(token.name),
+                        classes = {"thc-card-name", "bold", "sizeXs"},
+                        text = THCUtils.TruncateName(token.name),
                     },
                 },
-                BuildHealthBar(token, health, SetEntryOpen),
-                (dmhub.isDM and not isSummon) and BuildAddToCombatButton(token) or nil,
+                THCWidgets.HealthBar(token, health),
+                (dmhub.isDM and not isSummon) and THCWidgets.AddToCombatButton(token) or nil,
             },
 
-            BuildResistancesRow(hero),
+            THCWidgets.ResistancesRow(creatureProps),
+
+            THCWidgets.CharacteristicsRow(creatureProps),
 
             gui.Panel{
-                classes = {"ha-card-row"},
+                classes = {"thc-card-row"},
                 children = statChildren,
             },
 
-            BuildConditionsRow(token),
+            THCWidgets.ConditionsRow(token),
         }
     end
 
+    --- @param summon token
+    --- @return Panel[]
+    local function BuildSummonRows(summon)
+        local rows = BuildCreatureRows(summon, true)
+        rows[#rows + 1] = THCWidgets.DamageForm(summon, SetEntryOpen)
+        return rows
+    end
+
+    --- One summon's block inside its summoner's card. Carries its own monitor,
+    --- so its stamina and conditions land without the summoner changing, and
+    --- its own form, so the curtain covers the summon rather than the hero.
+    --- @param summon token
+    --- @return Panel
+    local function BuildSummonCard(summon)
+        return gui.Panel{
+            classes = {"ha-summon-card", THCWidgets.overlayHostClass},
+
+            monitorGame = summon.monitorPath,
+            refreshGame = function(element)
+                if summon.valid and not m_entryOpen then
+                    element.children = BuildSummonRows(summon)
+                end
+            end,
+
+            children = BuildSummonRows(summon),
+        }
+    end
+
+    --- The summons block: the arrow in the gutter, and what it folds.
+    ---
+    --- Horizontal, with the arrow topped rather than centred, so it sits
+    --- immediately left of the first summon card and level with it.
+    ---
+    --- Collapses entirely for a hero with no summons, so every card carries the
+    --- block and none has to be built conditionally.
+    --- @return Panel
+    local function BuildSummons()
+        local folded = HACombatTab.SummonsCollapsed(m_token)
+
+        --Read fresh rather than trusting what was bound: changing map takes the
+        --summons away before the card is rebound, and a token on its way out
+        --answers to `valid` while its properties have already gone.
+        local summons = {}
+        for _, summon in ipairs(m_summons) do
+            if summon ~= nil and summon.valid and summon.properties ~= nil then
+                summons[#summons + 1] = summon
+            end
+        end
+
+        --A lone beastheart companion is a character the Director knows by
+        --name; anything else is a crowd.
+        local label = "Summons"
+        if #summons == 1 and summons[1].properties:IsCompanion() then
+            label = THCUtils.TruncateName(summons[1].name)
+        end
+
+        local labelPanel = gui.Label{
+            classes = {"ha-summons-label", "sizeXxs", "fgMuted", not folded and "collapsed" or nil},
+            italics = true,
+            text = label,
+        }
+
+        local cards = {}
+        for _, summon in ipairs(summons) do
+            cards[#cards + 1] = BuildSummonCard(summon)
+        end
+
+        local cardsPanel = gui.Panel{
+            classes = {"ha-summons-cards", folded and "collapsed" or nil},
+            children = cards,
+        }
+
+        --No classes key of our own when folded: an empty list wipes
+        --ExpandoArrow's own theme classes, and with them the glyph's colour and
+        --hover. `click`, as the library panels use.
+        local arrowArgs = {
+            width = HAConstants.summonsArrowSize,
+            height = HAConstants.summonsArrowSize,
+            halign = "center",
+            valign = "center",
+            hmargin = 0,
+            click = function(element)
+                HACombatTab.ToggleSummons(m_token)
+
+                local nowFolded = HACombatTab.SummonsCollapsed(m_token)
+                element:SetClass("expanded", not nowFolded)
+                labelPanel:SetClass("collapsed", not nowFolded)
+                cardsPanel:SetClass("collapsed", nowFolded)
+            end,
+        }
+        if not folded then
+            arrowArgs.classes = { "expanded" }
+        end
+
+        return gui.Panel{
+            classes = {"ha-summons", #summons == 0 and "collapsed" or nil},
+
+            gui.Panel{
+                classes = {"ha-summons-gutter"},
+                gui.ExpandoArrow(arrowArgs),
+            },
+
+            gui.Panel{
+                classes = {"ha-summons-body"},
+                labelPanel,
+                cardsPanel,
+            },
+        }
+    end
+
+    --- The card's rows, read fresh. Rebuilt whole rather than bound field by
+    --- field: they are short, and every value is read together.
+    --- @return Panel[] rows
+    local function BuildRows()
+        --The hero's own reading is wrapped so the curtain covers the hero and
+        --not the summons hanging beneath them.
+        local heroRows = BuildCreatureRows(m_token, false)
+        heroRows[#heroRows + 1] = THCWidgets.DamageForm(m_token, SetEntryOpen)
+
+        return {
+            gui.Panel{
+                classes = {"ha-hero-block", THCWidgets.overlayHostClass},
+                children = heroRows,
+            },
+            BuildSummons(),
+        }
+    end
 
     return gui.Panel{
-        classes = {"ha-card", stripe, isSummon and "ha-card-summon" or nil},
+        classes = {"thc-card", "collapsed"},
         --Inline: the active theme rounds panels by default, which would bow the
         --hairline the cards are separated by.
         cornerRadius = 0,
 
         --Each card watches its own hero the way the character panel watches the
         --selected token, so stamina and conditions land here on their own
-        --rather than waiting for the whole panel to be rebuilt.
-        monitorGame = token.monitorPath,
+        --rather than waiting for the whole list to be rebuilt. Repointed on
+        --every bind, because the card outlives the hero in it.
         refreshGame = function(element)
             --Holding off mid-edit: rebuilding would destroy the damage or heal
             --box the Director is typing into. The commit refreshes anyway.
-            if token.valid and not m_entryOpen then
+            if m_token ~= nil and m_token.valid and not m_entryOpen then
                 element.children = BuildRows()
             end
         end,
 
-        children = BuildRows(),
+        --Folding the summons changes only what is inside this card, so it never
+        --reaches the list.
+        rebuildRows = function(element)
+            if m_token ~= nil and m_token.valid then
+                element.children = BuildRows()
+            end
+        end,
+
+        bindHero = function(element, entry)
+            if entry == nil then
+                --Parked past the end of the list. The monitor goes with the
+                --hero, or a card holding nobody would still wake on their
+                --changes, and the rows go too rather than holding a token.
+                m_token = nil
+                m_summons = {}
+                m_entryOpen = false
+                element.monitorGame = nil
+                element.children = {}
+                element:SetClass("collapsed", true)
+                return
+            end
+
+            m_token = entry.token
+            m_summons = entry.summons or {}
+            m_entryOpen = false
+
+            element:SetClass("collapsed", false)
+            element:SetClass("thc-card-even", entry.even)
+            element:SetClass("thc-card-odd", not entry.even)
+
+            element.monitorGame = m_token.monitorPath
+            element.children = BuildRows()
+        end,
     }
 end
 
---- Every hero card, alphabetical.
---- @return Panel[] cards
-function HACombatTab.BuildCards()
-    local entries = HAHeroData.CollectCombatHeroes()
 
-    if #entries == 0 then
-        return {
-            gui.Label{
-                classes = {"ha-empty", "sizeS", "fgMuted"},
-                text = "No player-assigned heroes found.",
-            },
+--- Every hero on the board and the summons under them, flattened into the one
+--- list the card pool binds against.
+---
+--- One entry per hero. A summon is not an entry of its own: it is drawn inside
+--- its summoner's card, so the pool only ever binds heroes and the zebra never
+--- restarts mid-group.
+--- @return table[] entries { token, even, summons }
+function HACombatTab.CardEntries()
+    local entries = {}
+
+    for i, entry in ipairs(HAHeroData.CollectCombatHeroes()) do
+        entries[#entries + 1] = {
+            token = entry.token,
+            even = i % 2 == 0,
+            summons = HAHeroData.SummonsFor(entry.token),
         }
     end
 
-    local cards = {}
-    for i, entry in ipairs(entries) do
-        local stripe = i % 2 == 0 and "ha-card-even" or "ha-card-odd"
-        cards[#cards + 1] = HACombatTab.BuildCard(entry, stripe, false)
+    return entries
+end
 
-        --Directly under their summoner and on the same stripe, so the group
-        --reads as one block rather than restarting the zebra mid-hero.
-        for _, summon in ipairs(HAHeroData.SummonsFor(entry.token)) do
-            cards[#cards + 1] = HACombatTab.BuildCard({
-                token = summon,
-                hero = summon.properties,
-                name = summon.name or "Unknown",
-            }, stripe, true)
-        end
-    end
-    return cards
+--- The Combat tab: the card list, and the line that stands in for it when there
+--- is nobody to show.
+--- @return Panel
+function HACombatTab.Build()
+    local emptyLabel = gui.Label{
+        classes = {"thc-empty", "sizeS", "fgMuted", "collapsed"},
+        text = "No player-assigned heroes found.",
+    }
+
+    local cardList = gui.Panel{
+        classes = {"thc-cardlist"},
+    }
+
+    return gui.Panel{
+        classes = {"ha-tabbody"},
+        vscroll = true,
+
+        refreshData = function()
+            local entries = HACombatTab.CardEntries()
+            emptyLabel:SetClass("collapsed", #entries > 0)
+            THCWidgets.BindList(cardList, entries, HACombatTab.CreateCard, "bindHero")
+        end,
+
+        create = function(element)
+            element:FireEvent("refreshData")
+        end,
+
+        emptyLabel,
+        cardList,
+    }
 end

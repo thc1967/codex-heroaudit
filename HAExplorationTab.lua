@@ -60,7 +60,7 @@ local function BuildSection(title, buckets, onPress)
 
     if #buckets == 0 then
         chips[#chips + 1] = gui.Label{
-            classes = {"ha-chip-label", "sizeXxs", "fgMuted"},
+            classes = {"thc-chip-label", "sizeXxs", "fgMuted"},
             text = "None",
         }
     end
@@ -73,12 +73,12 @@ local function BuildSection(title, buckets, onPress)
 
         --No "x1": the chip being here already says someone has it, so printing
         --it on every entry only buries the counts worth noticing.
-        chips[#chips + 1] = HADockPanel.Chip{
+        chips[#chips + 1] = THCWidgets.Chip{
             label = bucket.count > 1
                 and string.format("%s x%d", bucket.name, bucket.count)
                 or bucket.name,
             tooltip = table.concat(names, "\n"),
-            onPress = onPress ~= nil and function(element)
+            press = onPress ~= nil and function(element)
                 onPress(element, bucket)
             end or nil,
         }
@@ -92,7 +92,7 @@ local function BuildSection(title, buckets, onPress)
             text = title,
         },
         gui.Panel{
-            classes = {"ha-chips"},
+            classes = {"thc-chips"},
             wrap = true,
             children = chips,
         },
@@ -147,19 +147,14 @@ function HAExplorationTab.Build()
         end,
     }
 
-    --Re-read rather than written once: the party filter's caption carries the
-    --party's name, which can be changed while the panel is open.
-    local caption = gui.Label{
-        classes = {"ha-filter-label", "sizeXs", "fgMuted"},
-        text = FilterText(m_filter),
-        refreshSections = function(element)
-            element.text = FilterText(m_filter)
-        end,
-    }
-
-    local filterButton = gui.Button{
-        classes = {"ha-filter-button", "sizeXs"},
+    --The caption is re-read on every refresh rather than written once: the
+    --party filter's caption carries the party's name, which can be changed
+    --while the panel is open.
+    local header
+    header = THCWidgets.HeaderBar{
         icon = HAConstants.iconFilter,
+        text = FilterText(m_filter),
+        tooltip = "Choose which heroes are counted",
 
         press = function(element)
             local entries = {}
@@ -172,7 +167,7 @@ function HAExplorationTab.Build()
                         click = function()
                             element.popup = nil
                             m_filter = id
-                            caption:FireEvent("refreshSections")
+                            header:FireEventTree("setHeaderText", FilterText(m_filter))
                             sections:FireEvent("refreshSections")
                         end,
                     }
@@ -186,13 +181,6 @@ function HAExplorationTab.Build()
                 entries = entries,
             }
         end,
-
-        linger = function(element)
-            gui.Tooltip{
-                text = "Choose which heroes are counted",
-                fontSize = HAConstants.tooltipFontSize,
-            }(element)
-        end,
     }
 
     return gui.Panel{
@@ -200,6 +188,7 @@ function HAExplorationTab.Build()
         vscroll = true,
 
         refreshData = function(element)
+            header:FireEventTree("setHeaderText", FilterText(m_filter))
             element:FireEventTree("refreshSections")
         end,
 
@@ -207,12 +196,7 @@ function HAExplorationTab.Build()
             element:FireEventTree("refreshSections")
         end,
 
-        gui.Panel{
-            classes = {"ha-filter-row"},
-            caption,
-            filterButton,
-        },
-
+        header,
         sections,
     }
 end
