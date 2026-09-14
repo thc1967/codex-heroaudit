@@ -541,6 +541,10 @@ function HACombatTab.CreateCard(options)
     local m_token = nil
     local m_summons = {}
 
+    --A host may stand the tool row down for a while, over a selection of
+    --several say, without giving the tools up.
+    local m_toolsShown = true
+
     --Set while a damage or heal box is up, on the hero's bar or a summon's, so
     --a token update does not rebuild the rows and delete the field under the
     --caret. Shared across the group because they rebuild together.
@@ -717,7 +721,7 @@ function HACombatTab.CreateCard(options)
 
         --For a host that asks, the tool buttons close the card as a row of
         --their own, packed left.
-        if (not isSummon) and options.tools then
+        if (not isSummon) and options.tools and m_toolsShown then
             rows[#rows + 1] = gui.Panel{
                 classes = {"thc-card-row"},
                 gui.Panel{
@@ -879,6 +883,17 @@ function HACombatTab.CreateCard(options)
         --reaches the list.
         rebuildRows = function(element)
             if m_token ~= nil and m_token.valid then
+                element.children = BuildRows()
+            end
+        end,
+
+        --Whether the tool row is up, for a host that stands it down.
+        showTools = function(element, shown)
+            if m_toolsShown == shown then
+                return
+            end
+            m_toolsShown = shown
+            if m_token ~= nil and m_token.valid and not m_entryOpen then
                 element.children = BuildRows()
             end
         end,
