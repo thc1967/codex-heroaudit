@@ -10,6 +10,8 @@ HAConstants.icon = "phosphor/list-magnifying-glass.png"
 
 --- Stands in wherever the intended icon has not been identified yet.
 HAConstants.iconPlaceholder = "phosphor/seal-question-light.png"
+--- The malice glyph, for a monster's heroic resource in place of a class's.
+HAConstants.iconMalice = "drawsteel/ability/malice_icon.png"
 
 HAConstants.iconRecoveries = "phosphor/heartbeat-light.png"
 HAConstants.iconSurges = "phosphor/lightning-light.png"

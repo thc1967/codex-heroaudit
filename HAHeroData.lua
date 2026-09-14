@@ -437,7 +437,7 @@ function HAHeroData.HeroicResource(token)
     end
 
     local classInfo = iconSource:IsHero() and iconSource:GetClass() or nil
-    local icon = HAConstants.iconPlaceholder
+    local icon = hero:IsMonster() and HAConstants.iconMalice or HAConstants.iconPlaceholder
     if classInfo ~= nil and classInfo ~= false then
         icon = classInfo:try_get("heroicResourceIcon", HAConstants.iconPlaceholder)
     end
