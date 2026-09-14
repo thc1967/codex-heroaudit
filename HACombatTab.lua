@@ -530,7 +530,7 @@ end
 --- typing a damage amount is holding a panel that a rebuild would delete under
 --- the caret. A card that outlives its refresh makes that structural rather
 --- than something the refresh has to tiptoe around.
---- @param options {victories: boolean, heroTokens: boolean, tools: boolean, extraTools: fun(token: token, editable: boolean): Panel[], conditions: boolean, canEdit: fun(token: token): boolean}|nil What a host adds to or leaves off the reading, and who may edit; a number, from a pooled list, means the defaults. Without `canEdit`, only a Director edits; `conditions = false` leaves the conditions row off the creature the card is for, its summons keeping theirs.
+--- @param options {victories: boolean, heroTokens: boolean, tools: boolean, extraTools: fun(token: token, editable: boolean): Panel[], extraToolsRight: fun(token: token, editable: boolean): Panel[], conditions: boolean, canEdit: fun(token: token): boolean}|nil What a host adds to or leaves off the reading, and who may edit; a number, from a pooled list, means the defaults. `extraToolsRight` packs at the tool row's right end. Without `canEdit`, only a Director edits; `conditions = false` leaves the conditions row off the creature the card is for, its summons keeping theirs.
 --- @return Panel
 function HACombatTab.CreateCard(options)
     if type(options) ~= "table" then
@@ -729,6 +729,10 @@ function HACombatTab.CreateCard(options)
                     classes = {"ha-row-left"},
                     children = ToolButtons(token, editable, options.extraTools),
                 },
+                options.extraToolsRight ~= nil and gui.Panel{
+                    classes = {"ha-row-right"},
+                    children = options.extraToolsRight(token, editable),
+                } or nil,
             }
         end
         return rows
