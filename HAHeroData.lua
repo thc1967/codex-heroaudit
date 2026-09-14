@@ -156,6 +156,27 @@ function HAHeroData.SummonsFor(token)
     return result
 end
 
+--- The retainers a hero mentors, alphabetical: the followers the hero lists
+--- that are retainers. Map-scoped, as the summons are: a retainer that is
+--- not placed is not in play.
+--- @param token token The mentor's token.
+--- @return table tokens
+function HAHeroData.RetainersFor(token)
+    local followers = token.properties:GetFollowers() or {}
+    local result = {}
+    for _, other in ipairs(dmhub.allTokens) do
+        if followers[other.charid] and other.properties ~= nil and other.properties:IsRetainer() then
+            result[#result + 1] = other
+        end
+    end
+
+    table.sort(result, function(a, b)
+        return string.lower(a.name or "") < string.lower(b.name or "")
+    end)
+
+    return result
+end
+
 --- Recovery is found by name in the user-editable resource table, so every
 --- caller has to cope with it being absent.
 --- @return string|nil recoveryid

@@ -111,9 +111,9 @@ local function SpendRecovery(element, token)
     }
 end
 
---- Which heroes have their summons folded away, keyed by the summoner's charid.
---- Kept off the card, which outlives the hero bound to it. Absent means
---- expanded.
+--- Which heroes have their summons and retainers folded away, keyed by the
+--- hero's charid. Kept off the card, which outlives the hero bound to it.
+--- Absent means expanded.
 local m_summonsCollapsed = {}
 
 --- @param token token|nil The summoner.
@@ -134,9 +134,10 @@ end
 --- "bindHero" event and hands it nil when there are more cards than heroes, at
 --- which point it parks itself rather than being destroyed.
 ---
---- A hero's summons are built INSIDE their card rather than beside it, so the
---- hairline that separates cards falls below the whole group and the summons
---- read as belonging to the hero rather than merely following them.
+--- A hero's summons and retainers are built INSIDE their card rather than
+--- beside it, so the hairline that separates cards falls below the whole
+--- group and they read as belonging to the hero rather than merely following
+--- them.
 ---
 --- Open Request Rolls for one hero with one characteristic already chosen.
 --- The dialog seeds its token pool from the map selection and takes
@@ -761,12 +762,12 @@ function HACombatTab.CreateCard(options)
         }
     end
 
-    --- The summons block: the arrow in the gutter, and what it folds.
+    --- The summons and retainers block: the arrow in the gutter, and what it folds.
     ---
     --- Horizontal, with the arrow topped rather than centred, so it sits
     --- immediately left of the first summon card and level with it.
     ---
-    --- Collapses entirely for a hero with no summons, so every card carries the
+    --- Collapses entirely for a hero with none, so every card carries the
     --- block and none has to be built conditionally.
     --- @return Panel
     local function BuildSummons()
@@ -782,11 +783,21 @@ function HACombatTab.CreateCard(options)
             end
         end
 
-        --A lone beastheart companion is a character the Director knows by
-        --name; anything else is a crowd.
+        --A lone beastheart companion or retainer is a character the Director
+        --knows by name; anything else is a crowd, named for what it holds.
         local label = "Summons"
-        if #summons == 1 and summons[1].properties:IsCompanion() then
+        local retainers = 0
+        for _, summon in ipairs(summons) do
+            if summon.properties:IsRetainer() then
+                retainers = retainers + 1
+            end
+        end
+        if #summons == 1 and (summons[1].properties:IsCompanion() or summons[1].properties:IsRetainer()) then
             label = THCUtils.TruncateName(summons[1].name)
+        elseif retainers == #summons then
+            label = "Retainers"
+        elseif retainers > 0 then
+            label = "Summons & Retainers"
         end
 
         local labelPanel = gui.Label{
@@ -927,21 +938,25 @@ function HACombatTab.CreateCard(options)
 end
 
 
---- Every hero on the board and the summons under them, flattened into the one
---- list the card pool binds against.
+--- Every hero on the board and the summons and retainers under them,
+--- flattened into the one list the card pool binds against.
 ---
---- One entry per hero. A summon is not an entry of its own: it is drawn inside
---- its summoner's card, so the pool only ever binds heroes and the zebra never
---- restarts mid-group.
+--- One entry per hero. A summon or a retainer is not an entry of its own: it
+--- is drawn inside its summoner's or mentor's card, so the pool only ever
+--- binds heroes and the zebra never restarts mid-group.
 --- @return table[] entries { token, even, summons }
 function HACombatTab.CardEntries()
     local entries = {}
 
     for i, entry in ipairs(HAHeroData.CollectCombatHeroes()) do
+        local under = HAHeroData.SummonsFor(entry.token)
+        for _, retainer in ipairs(HAHeroData.RetainersFor(entry.token)) do
+            under[#under + 1] = retainer
+        end
         entries[#entries + 1] = {
             token = entry.token,
             even = i % 2 == 0,
-            summons = HAHeroData.SummonsFor(entry.token),
+            summons = under,
         }
     end
 
