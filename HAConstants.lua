@@ -157,8 +157,10 @@ HAConstants.styles = {
         tpad = 3,
         bgimage = true,
         bgcolor = "clear",
+        --Muted rather than the card divider, so a summon reads as part of
+        --its summoner's block rather than cut off from it.
         border = {x1 = 0, x2 = 0, y1 = 0, y2 = 1},
-        borderColor = "@border",
+        borderColor = "@fgMuted",
     },
     {
         selectors = {"ha-summons-label"},
