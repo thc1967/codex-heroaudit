@@ -13,7 +13,7 @@ HAConstants.iconPlaceholder = "phosphor/seal-question-light.png"
 
 HAConstants.iconRecoveries = "phosphor/heartbeat-light.png"
 HAConstants.iconSurges = "phosphor/lightning-light.png"
-HAConstants.iconHeroTokens = "drawsteel/hero-token.png"
+HAConstants.iconHeroTokens = "phosphor/coin-vertical-light.png"
 HAConstants.iconVictories = "drawsteel/HeroicResources/T_UI_ICON_FLAT_HR_VICTORY.png"
 
 --The character panel's own glyphs for its light toggle and sheet button.
