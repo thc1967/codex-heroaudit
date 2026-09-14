@@ -149,35 +149,395 @@ local function RequestCharacteristicRoll(token, attrId)
     LaunchablePanel.LaunchPanelByName("Request Rolls", { characteristics = { [attrId] = true } })
 end
 
---- A stat value the Director presses to set, through the card's form. Reads
---- as a plain value otherwise, and for players.
+--- Opens the card's form on a value, from any control inside the card.
+--- @param element Panel The pressed control.
+--- @param token token The creature the card is for, which keys the form.
+--- @param entry {label: string, initial: string, apply: fun(text: string)} What the form opens with.
+local function OpenEditor(element, token, entry)
+    local host = element:FindParentWithClass(THCWidgets.overlayHostClass)
+    if host ~= nil then
+        host:FireEventTree("openOverlay", token, entry)
+    end
+end
+
+--- A stat value pressed to set it, through the card's form, for a group
+--- whose glyph has a press of its own. Reads as a plain value when it
+--- cannot be set.
 --- @param token token The hero the card is for, which keys the card's form.
 --- @param text string The value as printed.
---- @param editable boolean Whether setting it makes sense right now.
+--- @param editable boolean Whether this viewer may set it right now.
 --- @param entry {label: string, initial: string, apply: fun(text: string)} What the form opens with.
 --- @return Panel
 local function EditableStat(token, text, editable, entry)
-    editable = editable and dmhub.isDM
     return gui.Label{
         classes = {"thc-stat-value", "sizeXs"},
         text = text,
         hoverCursor = editable and "pressbutton" or nil,
         linger = editable and THCWidgets.Tooltip("Set " .. entry.label) or nil,
         press = editable and function(element)
-            local host = element:FindParentWithClass(THCWidgets.overlayHostClass)
-            if host ~= nil then
-                host:FireEventTree("openOverlay", token, entry)
-            end
+            OpenEditor(element, token, entry)
         end or nil,
     }
+end
+
+--- A whole stat group pressed to set its value, glyph or number, for a stat
+--- whose glyph has no press of its own. The group is the hit target and its
+--- children are not, so the cursor, hover and press land on it anywhere;
+--- the children brighten off its hover. Reads as a plain group when it
+--- cannot be set.
+--- @param tooltip string What the stat is called.
+--- @param icon string The stat's glyph.
+--- @param token token The creature the card is for, which keys the card's form.
+--- @param text string The value as printed.
+--- @param editable boolean Whether this viewer may set it right now.
+--- @param entry {label: string, initial: string, apply: fun(text: string)} What the form opens with.
+--- @return Panel
+local function EditableGroup(tooltip, icon, token, text, editable, entry)
+    local hot = editable and "thc-hot" or nil
+    return gui.Panel{
+        classes = {"thc-stat-group"},
+        linger = THCWidgets.Tooltip(editable and ("Set " .. entry.label) or tooltip),
+        hoverCursor = editable and "pressbutton" or nil,
+        press = editable and function(element)
+            OpenEditor(element, token, entry)
+        end or nil,
+        gui.Panel{
+            classes = {"thc-stat-icon", "bgInverse", hot},
+            bgimage = icon,
+            interactable = false,
+        },
+        gui.Label{
+            classes = {"thc-stat-value", "sizeXs", hot},
+            text = text,
+            interactable = false,
+        },
+    }
+end
+
+--- Reset hero tokens for the session, by the character panel's rules: when
+--- the encounter builder, the map and the party agree on how many heroes
+--- there are, straight to that count; when they differ, a menu offers each
+--- distinct count.
+--- @param element Panel The pressed button, which the menu hangs off.
+--- @param token token A hero's token; the pool is the party's.
+local function RefreshHeroTokens(element, token)
+    local encounterCount, mapCount, partyCount = HAHeroData.HeroTokenRefreshCounts()
+    if encounterCount == mapCount and mapCount == partyCount then
+        HAHeroData.RefreshHeroTokens(token, encounterCount)
+        return
+    end
+
+    local seen = {}
+    local entries = {}
+    for _, n in ipairs({encounterCount, mapCount, partyCount}) do
+        if seen[n] == nil then
+            seen[n] = true
+            entries[#entries + 1] = {
+                text = string.format("Refresh Hero Tokens (%d)", n),
+                click = function()
+                    element.popup = nil
+                    HAHeroData.RefreshHeroTokens(token, n)
+                end,
+            }
+        end
+    end
+
+    element.popup = gui.ContextMenu{
+        styles = ThemeEngine.GetStyles(),
+        entries = entries,
+    }
+end
+
+--- The party's hero tokens, as the character panel's box has them: the
+--- coin is its session reset, the count is set by pressing it, the tooltip
+--- says what they buy and what changed. The pool is the party's rather than
+--- the hero's, so the group watches the shared resource document itself:
+--- the card's own monitor never sees it move.
+--- @param token token The hero the card is for.
+--- @param editable boolean Whether this viewer may change the pool.
+--- @return Panel
+local function HeroTokensGroup(token, editable)
+    local entry = {
+        label = "Hero Tokens",
+        initial = "",
+        apply = function(text)
+            HAHeroData.SetHeroTokens(token, tonum(text, -1))
+        end,
+    }
+    local value = EditableStat(token, "", editable, entry)
+
+    --- @param element Panel
+    local function Refresh(element)
+        if not token.valid or token.properties == nil then
+            return
+        end
+        local text = tostring(token.properties:GetHeroTokens())
+        value.text = text
+        entry.initial = text
+    end
+
+    return gui.Panel{
+        classes = {"thc-stat-group"},
+        monitorGame = CharacterResource.GlobalResourcePath(),
+        refreshGame = Refresh,
+        create = Refresh,
+        linger = function(element)
+            if token.valid and token.properties ~= nil then
+                THCWidgets.Tooltip(HAHeroData.HeroTokenTooltip(token.properties))(element)
+            end
+        end,
+
+        gui.Button{
+            classes = {"ha-stat-button", "sizeXs", "thc-tint-fg"},
+            icon = HAConstants.iconHeroTokens,
+            linger = function(element)
+                local encounterCount, mapCount, partyCount = HAHeroData.HeroTokenRefreshCounts()
+                local text = "Reset Hero Tokens"
+                if encounterCount == mapCount and mapCount == partyCount then
+                    text = string.format("Reset Hero Tokens For Session (%d heroes)", encounterCount)
+                end
+                THCWidgets.Tooltip(text)(element)
+            end,
+            press = function(element)
+                if not editable then
+                    return
+                end
+                RefreshHeroTokens(element, token)
+            end,
+        },
+        value,
+    }
+end
+
+--- Whether the look-up eye is offered for this creature right now, and how
+--- many floors it can look up through: the character panel's own rules.
+--- Never for a Director not seeing as a token, never when the game's
+--- look-up setting forbids it, and only with floors above, counting those
+--- with an opening when the setting says so.
+--- @param token token
+--- @return boolean offered
+--- @return number maxLookup
+local function LookupOffer(token)
+    if not token.valid then
+        return false, 0
+    end
+    local canLookup = dmhub.GetSettingValue("canlookup")
+    if (dmhub.isDM and dmhub.tokenVision == nil)
+        or canLookup == "never"
+        or (canLookup == "opening" and token.countFloorsWithVisionAbove <= 0)
+        or (canLookup == "always" and token.countFloorsAbove <= 0) then
+        return false, 0
+    end
+
+    local maxLookup
+    if canLookup == "always" then
+        maxLookup = token.countFloorsAbove
+    else
+        maxLookup = token.countFloorsWithVisionAbove
+    end
+    local maxSetting = dmhub.GetSettingValue("maxlookup")
+    if maxSetting >= 0 then
+        maxLookup = math.min(maxLookup, maxSetting)
+    end
+    return true, maxLookup
+end
+
+--- The look-up eye, as the character panel's. Lit while looking up. A
+--- press toggles between forward and up; with more than one floor to look
+--- up through it offers each as a menu. Whether it is offered is a matter
+--- of settings and of whose eyes a Director is using, none of which is a
+--- change to the creature, so it is polled: the button hides and shows
+--- itself as the offer comes and goes.
+--- @param token token
+--- @return Panel
+local function LookupButton(token)
+    local offered, maxLookup = LookupOffer(token)
+
+    local lookingUp = dmhub.GetSettingValue("lookup") >= 1
+    return gui.Button{
+        classes = {"ha-tool-button", "sizeXs", lookingUp and "thc-tint-strong" or "thc-tint-muted", (not offered) and "collapsed" or nil},
+        icon = HAConstants.iconLookup,
+        monitor = "lookup",
+        events = {
+            monitor = function(element)
+                local up = dmhub.GetSettingValue("lookup") >= 1
+                element:SetClass("thc-tint-strong", up)
+                element:SetClass("thc-tint-muted", not up)
+            end,
+        },
+        thinkTime = 1,
+        think = function(element)
+            local nowOffered, nowMax = LookupOffer(token)
+            maxLookup = nowMax
+            element:SetClass("collapsed", not nowOffered)
+        end,
+        linger = function(element)
+            local cur = dmhub.GetSettingValue("lookup")
+            local text
+            if cur <= 0 then
+                text = "Look up"
+            elseif maxLookup <= 1 then
+                text = "Look forward"
+            else
+                text = string.format("Up %d / %d (click to cycle)", cur, maxLookup)
+            end
+            THCWidgets.Tooltip(text)(element)
+        end,
+        press = function(element)
+            local cur = dmhub.GetSettingValue("lookup")
+            if maxLookup <= 1 then
+                dmhub.SetSettingValue("lookup", (cur >= 1) and 0 or 1)
+                return
+            end
+            if element.popup ~= nil then
+                element.popup = nil
+                return
+            end
+            local items = {
+                {
+                    text = "Forward",
+                    click = function()
+                        dmhub.SetSettingValue("lookup", 0)
+                        element.popup = nil
+                    end,
+                },
+            }
+            for i = 1, maxLookup do
+                items[#items + 1] = {
+                    text = "Up " .. tostring(i),
+                    click = function()
+                        dmhub.SetSettingValue("lookup", i)
+                        element.popup = nil
+                    end,
+                }
+            end
+            element.popup = gui.ContextMenu{
+                styles = ThemeEngine.GetStyles(),
+                entries = items,
+            }
+        end,
+    }
+end
+
+--- The card's tool row, as the character panel's portrait column has them:
+--- the light toggle, lit in the strong tone while the creature's light is
+--- on; the look-up eye when it is offered; the character sheet; and for a
+--- Director on a monster, the summoner.
+--- @param token token The creature the card is for.
+--- @param editable boolean Whether this viewer may act on the creature.
+--- @param extra fun(token: token, editable: boolean): Panel[]|nil The host's own buttons, after these.
+--- @return Panel[]
+local function ToolButtons(token, editable, extra)
+    local lightOn = token.properties.selectedLoadout == 1
+    local buttons = {
+        gui.Button{
+            classes = {"ha-tool-button", "sizeXs", lightOn and "thc-tint-strong" or "thc-tint-muted"},
+            icon = lightOn and HAConstants.iconLightOn or HAConstants.iconLightOff,
+            linger = THCWidgets.Tooltip("Toggle Light"),
+            press = function()
+                if not editable or not token.valid then
+                    return
+                end
+                creature.ToggleLightSourceOnToken(token)
+                game.Refresh{
+                    tokens = {token.charid},
+                }
+            end,
+        },
+    }
+
+    buttons[#buttons + 1] = LookupButton(token)
+
+    buttons[#buttons + 1] = gui.Button{
+        classes = {"ha-tool-button", "sizeXs", "thc-tint-muted"},
+        icon = HAConstants.iconCharacterSheet,
+        linger = THCWidgets.Tooltip("Open Character Sheet"),
+        press = function()
+            if not editable or not token.valid then
+                return
+            end
+            token:ShowSheet()
+        end,
+    }
+
+    --A Director names a monster's summoner, as on the character panel: lit
+    --while one is set. The press enters map targeting over every other
+    --creature on the map; picking the current summoner clears the link.
+    if dmhub.isDM and not token.properties:IsHero() then
+        local hasSummoner = token.summonerid ~= nil
+        buttons[#buttons + 1] = gui.Button{
+            classes = {"ha-tool-button", "sizeXs", hasSummoner and "thc-tint-strong" or "thc-tint-muted"},
+            icon = THCWidgets.iconSetCaster,
+            linger = function(element)
+                local text = "Assign Summoner"
+                if token.valid and token.summonerid ~= nil then
+                    local summoner = dmhub.GetTokenById(token.summonerid)
+                    if summoner ~= nil and summoner.valid then
+                        text = string.format("Summoner: %s\nClick to change", summoner.description)
+                    end
+                end
+                THCWidgets.Tooltip(text)(element)
+            end,
+            press = function(element)
+                if not token.valid then
+                    return
+                end
+                local candidates = {}
+                for _, tok in ipairs(dmhub.allTokens) do
+                    if tok.valid and tok.properties ~= nil and tok.charid ~= token.charid then
+                        candidates[#candidates + 1] = tok
+                    end
+                end
+                if #candidates == 0 then
+                    THCWidgets.Tooltip("No other creatures on this map to assign as summoner.")(element)
+                    return
+                end
+
+                local prompt = "Choose this monster's summoner"
+                if token.summonerid ~= nil then
+                    prompt = "Choose this monster's summoner (pick the current summoner to clear)"
+                end
+                gamehud.actionBarPanel:FireEventTree("chooseTargetToken", {
+                    sourceToken = token,
+                    targets = candidates,
+                    prompt = prompt,
+                    choose = function(summoner)
+                        if not token.valid or summoner == nil or not summoner.valid then
+                            return
+                        end
+                        if summoner.charid == token.summonerid then
+                            DrawSteelMinion.SetSummoner(token, nil)
+                        else
+                            DrawSteelMinion.SetSummoner(token, summoner)
+                        end
+                    end,
+                    cancel = function() end,
+                })
+            end,
+        }
+    end
+
+    if extra ~= nil then
+        for _, button in ipairs(extra(token, editable) or {}) do
+            buttons[#buttons + 1] = button
+        end
+    end
+    return buttons
 end
 
 --- Pooled rather than rebuilt because the card owns a text field: the Director
 --- typing a damage amount is holding a panel that a rebuild would delete under
 --- the caret. A card that outlives its refresh makes that structural rather
 --- than something the refresh has to tiptoe around.
+--- @param options {victories: boolean, heroTokens: boolean, tools: boolean, extraTools: fun(token: token, editable: boolean): Panel[], conditions: boolean, canEdit: fun(token: token): boolean}|nil What a host adds to or leaves off the reading, and who may edit; a number, from a pooled list, means the defaults. Without `canEdit`, only a Director edits; `conditions = false` leaves the conditions row off the creature the card is for, its summons keeping theirs.
 --- @return Panel
-function HACombatTab.CreateCard()
+function HACombatTab.CreateCard(options)
+    if type(options) ~= "table" then
+        options = {}
+    end
+    local canEdit = options.canEdit or function()
+        return dmhub.isDM
+    end
     local m_token = nil
     local m_summons = {}
 
@@ -199,7 +559,11 @@ function HACombatTab.CreateCard()
     local function BuildCreatureRows(token, isSummon)
         local creatureProps = token.properties
         local health = THCUtils.Health(creatureProps)
-        local heroLike = not isSummon or creatureProps:IsCompanion()
+        --Heroes and companions get the hero reading: resources, and
+        --movement on a row of its own. A monster, summoned or selected on
+        --its own, gets the compact one.
+        local heroLike = creatureProps:IsHero() or creatureProps:IsCompanion()
+        local editable = canEdit(token) == true
 
         local resources = nil
         if heroLike then
@@ -218,14 +582,14 @@ function HACombatTab.CreateCard()
                         icon = HAConstants.iconRecoveries,
                         linger = THCWidgets.Tooltip("Use a recovery"),
                         press = function(element)
-                            if not dmhub.isDM then
+                            if not editable then
                                 return
                             end
                             SpendRecovery(element, token)
                         end,
                     },
                     THCWidgets.StatValue(string.format("+%d", recoveryAmount)),
-                    EditableStat(token, string.format(" %d/%d", recoveriesLeft, recoveriesMax), true, {
+                    EditableStat(token, string.format(" %d/%d", recoveriesLeft, recoveriesMax), editable, {
                         label = "# Recoveries",
                         initial = string.format("%d", recoveriesLeft),
                         apply = function(text)
@@ -233,58 +597,82 @@ function HACombatTab.CreateCard()
                         end,
                     }),
                 }),
-                THCWidgets.StatGroup("Surges", {
-                    THCWidgets.StatIcon(HAConstants.iconSurges),
-                    EditableStat(token, HAHeroData.Surges(creatureProps), inCombat, {
-                        label = "Surges",
-                        initial = inCombat and HAHeroData.Surges(creatureProps) or "",
-                        apply = function(text)
-                            HAHeroData.SetSurges(token, tonum(text, -1))
-                        end,
-                    }),
+                EditableGroup("Surges", HAConstants.iconSurges, token, HAHeroData.Surges(creatureProps), editable and inCombat, {
+                    label = "Surges",
+                    initial = inCombat and HAHeroData.Surges(creatureProps) or "",
+                    apply = function(text)
+                        HAHeroData.SetSurges(token, tonum(text, -1))
+                    end,
                 }),
-                THCWidgets.StatGroup(heroicName, {
-                    THCWidgets.StatIcon(heroicIcon),
-                    EditableStat(token, heroicValue, inCombat, {
-                        label = heroicName,
-                        initial = inCombat and heroicValue or "",
-                        apply = function(text)
-                            local n = tonum(text, nil)
-                            if n ~= nil then
-                                HAHeroData.SetHeroicResource(token, n)
-                            end
-                        end,
-                    }),
+                EditableGroup(heroicName, heroicIcon, token, heroicValue, editable and inCombat, {
+                    label = heroicName,
+                    initial = inCombat and heroicValue or "",
+                    apply = function(text)
+                        local n = tonum(text, nil)
+                        if n ~= nil then
+                            HAHeroData.SetHeroicResource(token, n)
+                        end
+                    end,
                 }),
             }
+
+            --Victories and hero tokens are only for a host that asks. Hero
+            --tokens belong to the party, not the hero, and only a hero
+            --proper gets them.
         end
 
         --Speed, disengage, stability and altitude read the same for anything
         --with a token, so they come whole from THCWidgets. A summon has no
         --stat row of its own, so its movement runs on after the
-        --characteristics instead.
-        local movement = THCWidgets.MovementStats(token)
+        --characteristics instead. Victories and hero tokens, for a host that
+        --asks, lead a hero's movement row; hero tokens belong to the party,
+        --not the hero, and only a hero proper gets them.
+        --A monster's free strike is a fixed number: read as the character
+        --panel's identity strip reads it, and shown only where there is one.
+        --On the hero reading it leads the movement row; on the compact one
+        --it ends the characteristics row, packed right.
+        local freeStrike = nil
+        if creatureProps:IsMonster() then
+            pcall(function() freeStrike = creatureProps:OpportunityAttack() end)
+        end
+        local freeStrikeGroup = nil
+        if freeStrike ~= nil then
+            freeStrikeGroup = THCWidgets.StatGroup("Free Strike", {
+                THCWidgets.StatIcon(HAConstants.iconFreeStrike),
+                THCWidgets.StatValue(tostring(freeStrike)),
+            })
+        end
 
-        local characteristics = THCWidgets.CharacteristicsRow(creatureProps, (not heroLike) and movement or nil, dmhub.isDM and function(attrId)
+        local movement = {}
+        if heroLike and freeStrikeGroup ~= nil then
+            movement[#movement + 1] = freeStrikeGroup
+        end
+        if creatureProps:IsHero() and options.victories then
+            local victories = tostring(creatureProps:GetVictories())
+            movement[#movement + 1] = EditableGroup("Victories", HAConstants.iconVictories, token, victories, editable, {
+                label = "Victories",
+                initial = victories,
+                apply = function(text)
+                    HAHeroData.SetVictories(token, tonum(text, -1))
+                end,
+            })
+        end
+        if heroLike and options.heroTokens and creatureProps:IsHero() then
+            movement[#movement + 1] = HeroTokensGroup(token, editable)
+        end
+        for _, group in ipairs(THCWidgets.MovementStats(token, editable)) do
+            movement[#movement + 1] = group
+        end
+
+        local characteristics = THCWidgets.CharacteristicsRow(creatureProps, (not heroLike) and movement or nil, editable and function(attrId)
             RequestCharacteristicRoll(token, attrId)
         end or nil)
 
         local rows = {
             gui.Panel{
                 classes = {"thc-card-row"},
-                gui.Panel{
-                    classes = {"thc-card-identity"},
-                    gui.CreateTokenImage(token, {
-                        classes = {"thc-card-token"},
-                        halign = "left",
-                        valign = "center",
-                    }),
-                    gui.Label{
-                        classes = {"thc-card-name", "bold", "sizeXs"},
-                        text = THCUtils.TruncateName(token.name),
-                    },
-                },
-                THCWidgets.HealthBar(token, health),
+                THCWidgets.Identity(token),
+                THCWidgets.HealthBar(token, health, editable),
                 (dmhub.isDM and not isSummon) and THCWidgets.AddToCombatButton(token) or nil,
             },
         }
@@ -292,7 +680,18 @@ function HACombatTab.CreateCard()
         --A hero's characteristics share their row with the resources, centered
         --in its right half; then movement has a row of its own.
         if not heroLike then
-            rows[#rows + 1] = characteristics
+            if freeStrikeGroup ~= nil then
+                rows[#rows + 1] = gui.Panel{
+                    classes = {"thc-card-row"},
+                    characteristics,
+                    gui.Panel{
+                        classes = {"ha-row-right"},
+                        freeStrikeGroup,
+                    },
+                }
+            else
+                rows[#rows + 1] = characteristics
+            end
         else
             rows[#rows + 1] = gui.Panel{
                 classes = {"thc-card-row"},
@@ -312,7 +711,21 @@ function HACombatTab.CreateCard()
         end
 
         rows[#rows + 1] = THCWidgets.ResistancesRow(creatureProps)
-        rows[#rows + 1] = THCWidgets.ConditionsRow(token)
+        if isSummon or options.conditions ~= false then
+            rows[#rows + 1] = THCWidgets.ConditionsRow(token, editable)
+        end
+
+        --For a host that asks, the tool buttons close the card as a row of
+        --their own, packed left.
+        if (not isSummon) and options.tools then
+            rows[#rows + 1] = gui.Panel{
+                classes = {"thc-card-row"},
+                gui.Panel{
+                    classes = {"ha-row-left"},
+                    children = ToolButtons(token, editable, options.extraTools),
+                },
+            }
+        end
         return rows
     end
 

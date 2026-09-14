@@ -13,6 +13,15 @@ HAConstants.iconPlaceholder = "phosphor/seal-question-light.png"
 
 HAConstants.iconRecoveries = "phosphor/heartbeat-light.png"
 HAConstants.iconSurges = "phosphor/lightning-light.png"
+HAConstants.iconHeroTokens = "drawsteel/hero-token.png"
+HAConstants.iconVictories = "drawsteel/HeroicResources/T_UI_ICON_FLAT_HR_VICTORY.png"
+
+--The character panel's own glyphs for its light toggle and sheet button.
+HAConstants.iconLightOn = "drawsteel/light-on.png"
+HAConstants.iconLightOff = "drawsteel/light-off.png"
+HAConstants.iconCharacterSheet = "icons/icon_app/icon_app_33.png"
+HAConstants.iconLookup = "ui-icons/eye.png"
+HAConstants.iconFreeStrike = "ui-icons/skills/1.png"
 
 --- The indent a hero's summons sit in, and the arrow that folds them away. The
 --- arrow is sized here rather than in the builder because the themed {triangle}
@@ -195,6 +204,31 @@ HAConstants.styles = {
         flow = "horizontal",
         halign = "center",
         valign = "center",
+    },
+    --A run of controls packed to a row's left end, and one to its right.
+    {
+        selectors = {"ha-row-left"},
+        width = "auto",
+        height = "auto",
+        flow = "horizontal",
+        halign = "left",
+        valign = "center",
+    },
+    {
+        selectors = {"ha-row-right"},
+        width = "auto",
+        height = "auto",
+        flow = "horizontal",
+        halign = "right",
+        valign = "center",
+    },
+    {
+        selectors = {"ha-tool-button"},
+        width = 14,
+        height = 14,
+        halign = "left",
+        valign = "center",
+        hmargin = 3,
     },
     {
         selectors = {"ha-section"},

@@ -280,6 +280,116 @@ function HAHeroData.SetHeroicResource(token, wanted)
     }
 end
 
+--- The character panel's hero token tooltip: what they buy, then the pool's
+--- recent changes.
+--- @param hero character A hero; the pool is the party's.
+--- @return string markdown
+function HAHeroData.HeroTokenTooltip(hero)
+    local text = [[**Hero Tokens**
+* You can spend a hero token to gain two surges.
+* You can spend a hero token when you fail a saving throw to succeed instead.
+* You can reroll the result of a test. You must use the new result.
+* You can spend 2 hero tokens to regain Stamina equal to your Recovery value without spending a Recovery.
+]]
+    local history = hero:GetHeroTokenHistory()
+    if history ~= nil and #history > 0 then
+        text = text .. "\n**Recent Changes:**"
+        for _, entry in ipairs(history) do
+            text = string.format("%s\n%s: %d by %s %s", text, entry.note, entry.value, entry.who, entry.when)
+        end
+    end
+    return text
+end
+
+--- Set a hero's victories, as the character panel's box does. Nothing below
+--- zero, nothing when already right; the game raises its own event when the
+--- count goes up.
+--- @param token token The hero's token.
+--- @param wanted number Victories to have.
+function HAHeroData.SetVictories(token, wanted)
+    if wanted < 0 or not token.valid or token.properties == nil then
+        return
+    end
+
+    local props = token.properties
+    if wanted == props:GetVictories() then
+        return
+    end
+
+    token:ModifyProperties{
+        description = "Set Victories",
+        execute = function()
+            props:SetVictories(wanted)
+        end,
+    }
+end
+
+--- Set the party's hero tokens by hand, as the character panel's box does.
+--- Nothing below zero, nothing when already right.
+--- @param token token A hero's token; the pool is the party's.
+--- @param wanted number Hero tokens to have.
+function HAHeroData.SetHeroTokens(token, wanted)
+    if wanted < 0 or not token.valid or token.properties == nil then
+        return
+    end
+
+    local props = token.properties
+    if wanted == props:GetHeroTokens() then
+        return
+    end
+
+    token:ModifyProperties{
+        description = "Set Hero Tokens",
+        execute = function()
+            props:SetHeroTokens(wanted, "Set manually")
+        end,
+    }
+end
+
+--- The three counts a session reset of hero tokens could go to, as the
+--- character panel reckons them: the encounter builder's hero count, heroes
+--- on the map, and heroes in the player party.
+--- @return number encounterCount
+--- @return number mapCount
+--- @return number partyCount
+function HAHeroData.HeroTokenRefreshCounts()
+    local encounterCount = dmhub.GetSettingValue("numheroes")
+
+    local mapCount = 0
+    for _, tok in ipairs(dmhub.allTokens) do
+        if tok.properties ~= nil and tok.properties:IsHero() then
+            mapCount = mapCount + 1
+        end
+    end
+
+    local partyCount = 0
+    for _, charid in ipairs(dmhub.GetCharacterIdsInParty(GetDefaultPartyID()) or {}) do
+        local tok = dmhub.GetTokenById(charid)
+        if tok ~= nil and tok.properties ~= nil and tok.properties:IsHero() then
+            partyCount = partyCount + 1
+        end
+    end
+
+    return encounterCount, mapCount, partyCount
+end
+
+--- Reset the party's hero tokens for the session, as the character panel's
+--- refresh button does.
+--- @param token token A hero's token; the pool is the party's.
+--- @param n number Hero tokens to reset to.
+function HAHeroData.RefreshHeroTokens(token, n)
+    if not token.valid or token.properties == nil then
+        return
+    end
+
+    token:ModifyProperties{
+        description = "Reset Hero Tokens",
+        execute = function()
+            token.properties:SetHeroTokens(n, "Session Reset")
+        end,
+    }
+end
+
 --- How urgent a hero's remaining recoveries are, as one of the panel's icon
 --- tint classes. The last two are called out absolutely rather than by share:
 --- one recovery left is dire whether the hero started with three or ten.
@@ -377,6 +487,25 @@ function HAHeroData.GetLanguageNames(hero, includeSpeakers)
     end
     table.sort(names, function(a, b) return string.lower(a) < string.lower(b) end)
     return names
+end
+
+--- The hero's known languages with who speaks them, alphabetical by name.
+--- @param hero character The hero to read.
+--- @return {name: string, speakers: string}[] languages Speakers is "" when the table has none.
+function HAHeroData.GetLanguages(hero)
+    local result = {}
+    local langTable = dmhub.GetTableVisible(Language.tableName) or {}
+    for guid, _ in pairs(hero:LanguagesKnown() or {}) do
+        local lang = langTable[guid]
+        if lang and lang.name then
+            result[#result + 1] = {
+                name = lang.name,
+                speakers = lang.speakers or "",
+            }
+        end
+    end
+    table.sort(result, function(a, b) return string.lower(a.name) < string.lower(b.name) end)
+    return result
 end
 
 --- The skill table's id for a skill name, which is what a roll request wants.
