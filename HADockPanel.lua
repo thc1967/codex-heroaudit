@@ -93,43 +93,40 @@ function HADockPanel.Build()
 
     local themeSub
 
-    return gui.Panel{
+    local root
+    root = gui.Panel{
         classes = {"ha-root"},
         styles = ThemeEngine.MergeStyles(styles),
 
         --Stamina and conditions arrive through each card's own token monitor.
-        --This one is for the aggregates, which no single token owns. Debounced,
-        --because an object burst would otherwise rebuild a tab several times in
-        --one frame.
+        --This one is for the aggregates and for tokens placed or removed.
+        --Who counts as a hero also moves with the character list, where a
+        --token's owner is rewritten, and with the initiative queue, where a
+        --hero joins a fight unplaced; the two children below watch those.
+        --All three land on one debounce, because an object burst would
+        --otherwise rebuild a tab several times in one frame.
         monitorGame = dmhub.activeObjectsPath,
         refreshGame = function(element)
+            element:FireEvent("markDirty")
+        end,
+
+        markDirty = function(element)
             if not m_dirty then
                 m_dirty = true
                 element:ScheduleEvent("rebuildTabs", 0.3)
             end
         end,
 
-        rebuildTabs = function(element)
+        --The card list only when the roster changed; the exploration tab,
+        --skipped while hidden, on any of it, since switching to the tab
+        --rebuilds it anyway.
+        rebuildTabs = function()
             m_dirty = false
-            --Skipped while hidden; switching to the tab rebuilds it anyway.
-            if m_tab == HAConstants.tabExploration then
-                explorationBody:FireEvent("refreshData")
-            end
-        end,
-
-        --Who counts as a hero is not an object change any one path reports:
-        --assigning a token to a player rewrites its owner, and the active-object
-        --monitor above never fires. Polling the roster is cheap -- a handful of
-        --tokens, once a second -- and catches every way the party can change.
-        thinkTime = 1,
-        think = function(element)
             local roster = RosterSignature()
-            if roster == m_roster then
-                return
+            if roster ~= m_roster then
+                m_roster = roster
+                combatBody:FireEvent("refreshData")
             end
-
-            m_roster = roster
-            combatBody:FireEvent("refreshData")
             if m_tab == HAConstants.tabExploration then
                 explorationBody:FireEvent("refreshData")
             end
@@ -163,7 +160,15 @@ function HADockPanel.Build()
 
         combatBody,
         explorationBody,
+
+        THCWidgets.Watch("/initiativeQueue", function()
+            root:FireEvent("markDirty")
+        end),
+        THCWidgets.Watch("/characters", function()
+            root:FireEvent("markDirty")
+        end),
     }
+    return root
 end
 
 --Reads HAConstants at file scope, which is safe only because the mod loads it
