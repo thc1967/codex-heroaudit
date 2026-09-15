@@ -167,6 +167,7 @@ function HADockPanel.Build()
         THCWidgets.Watch("/characters", function()
             root:FireEvent("markDirty")
         end),
+        THCWidgets.ScaleChild(),
     }
     return root
 end
