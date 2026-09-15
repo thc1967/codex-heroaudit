@@ -29,8 +29,11 @@ function HAHeroData.CollectHeroes()
     return entries
 end
 
---- Every hero on the map or in the running fight, sorted A→Z. The two sets
---- genuinely differ: a hero can be in the initiative queue without being placed,
+--- Every hero of the players' on the map or in the running fight, sorted
+--- A→Z: a character-sheet creature that a player controls directly or
+--- that the player party lists. A party of the Director's own characters
+--- stays out, however it is built. The two placement sets genuinely
+--- differ: a hero can be in the initiative queue without being placed,
 --- and standing on the map without having joined the fight.
 ---
 --- Drawn from the global character list rather than `dmhub.allTokens`, which is
@@ -40,6 +43,11 @@ function HAHeroData.CollectCombatHeroes()
     local onMap = {}
     for _, token in ipairs(dmhub.allTokens) do
         onMap[token.charid] = true
+    end
+
+    local inParty = {}
+    for _, charid in ipairs(dmhub.GetCharacterIdsInParty(GetDefaultPartyID()) or {}) do
+        inParty[charid] = true
     end
 
     --Only while a fight is actually running: a hidden queue still holds the
@@ -53,8 +61,11 @@ function HAHeroData.CollectCombatHeroes()
     local entries = {}
     for _, token in ipairs(table.values(game.GetGameGlobalCharacters())) do
         if token.properties ~= nil and token.properties:IsHero() then
-            local include = onMap[token.charid] == true
-            if not include and combatants ~= nil then
+            --Shared party control counts a token as player controlled too,
+            --so the direct test is the one that means a named owner.
+            local theirs = token.playerControlledNotShared or inParty[token.charid] == true
+            local include = theirs and onMap[token.charid] == true
+            if theirs and not include and combatants ~= nil then
                 include = combatants[InitiativeQueue.GetInitiativeId(token)] ~= nil
             end
 
