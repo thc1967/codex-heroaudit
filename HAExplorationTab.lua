@@ -23,7 +23,7 @@ end
 --- @param element Panel The chip, which hosts the popup.
 --- @param bucket table An HAHeroData.Aggregate bucket.
 local function RequestSkillRoll(element, bucket)
-    local skillid = HAHeroData.SkillIdByName(bucket.name)
+    local skillid = THCUtils.SkillIdByName(bucket.name)
     if skillid == nil then
         return
     end
@@ -151,9 +151,9 @@ function HAExplorationTab.Build()
             local entries = HAHeroData.CollectByFilter(m_filter)
 
             local languages = HAHeroData.Aggregate(entries, function(hero)
-                return HAHeroData.GetLanguageNames(hero, false)
+                return THCUtils.GetLanguageNames(hero, false)
             end)
-            local skills = HAHeroData.Aggregate(entries, HAHeroData.GetSkillNames)
+            local skills = HAHeroData.Aggregate(entries, THCUtils.GetSkillNames)
 
             --Requesting a roll is a Director's job, and the Request Rolls
             --panel hides itself from players anyway.
@@ -169,7 +169,7 @@ function HAExplorationTab.Build()
     --while the panel is open.
     local header
     header = THCWidgets.HeaderBar{
-        icon = HAConstants.iconFilter,
+        icon = THCWidgets.iconFilter,
         text = FilterText(m_filter),
         tooltip = "Choose which heroes are counted",
 

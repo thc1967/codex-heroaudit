@@ -8,33 +8,6 @@ HAConstants = RegisterGameType("HAConstants")
 HAConstants.panelName = "Hero Audit"
 HAConstants.icon = "phosphor/list-magnifying-glass.png"
 
---- Stands in wherever the intended icon has not been identified yet.
-HAConstants.iconPlaceholder = "phosphor/seal-question-light.png"
---- The malice glyph, for a monster's heroic resource in place of a class's.
-HAConstants.iconMalice = "drawsteel/ability/malice_icon.png"
-
-HAConstants.iconRecoveries = "phosphor/heartbeat-light.png"
-HAConstants.iconSurges = "phosphor/lightning-light.png"
-HAConstants.iconHeroTokens = "phosphor/coin-vertical-light.png"
-HAConstants.iconVictories = "drawsteel/HeroicResources/T_UI_ICON_FLAT_HR_VICTORY.png"
-
---The character panel's own glyphs for its light toggle and sheet button.
-HAConstants.iconLightOn = "drawsteel/light-on.png"
-HAConstants.iconLightOff = "drawsteel/light-off.png"
-HAConstants.iconCharacterSheet = "icons/icon_app/icon_app_33.png"
-HAConstants.iconLookup = "ui-icons/eye.png"
-HAConstants.iconFreeStrike = "ui-icons/skills/1.png"
-
---- The indent a hero's summons sit in, and the arrow that folds them away. The
---- arrow is sized here rather than in the builder because the themed {triangle}
---- carries its own size and has to be overridden inline at construction.
-HAConstants.summonsGutterWidth = 14
-HAConstants.summonsArrowSize = 10
-
---- The band at the top of the summons block that the arrow and the folded
---- label each centre themselves in, so the two sit level with each other.
-HAConstants.summonsRowHeight = 16
-
 HAConstants.tabCombat = "combat"
 HAConstants.tabExploration = "exploration"
 
@@ -42,11 +15,6 @@ HAConstants.tabExploration = "exploration"
 HAConstants.tabWidth = 80
 HAConstants.tabHeight = 20
 HAConstants.tabFontSize = 12
-
---- Surges and heroic resources only exist in combat; this stands in otherwise.
-HAConstants.notInCombat = "-"
-
-HAConstants.iconFilter = "phosphor/funnel-fill.png"
 
 --- Which heroes the Exploration tab aggregates over. The order here is the
 --- order of the menu, and the first is the opening default.
@@ -115,123 +83,6 @@ HAConstants.styles = {
         valign = "top",
     },
 
-    --The summons block sits inside the summoner's card: the arrow in a gutter
-    --on the left, everything it folds to the right of it.
-    {
-        selectors = {"ha-hero-block"},
-        width = "100%",
-        height = "auto",
-        flow = "vertical",
-        halign = "left",
-        valign = "top",
-    },
-    {
-        selectors = {"ha-summons"},
-        width = "100%",
-        height = "auto",
-        flow = "horizontal",
-        halign = "left",
-        valign = "top",
-        tpad = 2,
-    },
-    {
-        selectors = {"ha-summons-gutter"},
-        width = HAConstants.summonsGutterWidth,
-        height = HAConstants.summonsRowHeight,
-        flow = "none",
-        halign = "left",
-        valign = "top",
-    },
-    {
-        selectors = {"ha-summons-body"},
-        width = string.format("100%%-%d", HAConstants.summonsGutterWidth),
-        height = "auto",
-        flow = "vertical",
-        halign = "left",
-        valign = "top",
-    },
-    {
-        selectors = {"ha-summons-cards"},
-        width = "100%",
-        height = "auto",
-        flow = "vertical",
-        halign = "left",
-        valign = "top",
-    },
-    {
-        selectors = {"ha-summon-card"},
-        width = "100%",
-        height = "auto",
-        flow = "vertical",
-        halign = "left",
-        valign = "top",
-        tpad = 3,
-        bgimage = true,
-        bgcolor = "clear",
-        --Muted rather than the card divider, so a summon reads as part of
-        --its summoner's block rather than cut off from it.
-        border = {x1 = 0, x2 = 0, y1 = 0, y2 = 1},
-        borderColor = "@fgMuted",
-    },
-    {
-        selectors = {"ha-summons-label"},
-        width = "100%",
-        height = HAConstants.summonsRowHeight,
-        halign = "left",
-        valign = "top",
-        textAlignment = "left",
-    },
-    {
-        selectors = {"ha-stat-button"},
-        width = 14,
-        height = 14,
-        halign = "left",
-        valign = "center",
-        hmargin = 2,
-    },
-    --The right half of the characteristics row, with a hero's resources
-    --centered in it as one left-packed run.
-    {
-        selectors = {"ha-stat-half"},
-        width = "50%",
-        height = "auto",
-        flow = "horizontal",
-        halign = "right",
-        valign = "center",
-    },
-    {
-        selectors = {"ha-stat-center"},
-        width = "auto",
-        height = "auto",
-        flow = "horizontal",
-        halign = "center",
-        valign = "center",
-    },
-    --A run of controls packed to a row's left end, and one to its right.
-    {
-        selectors = {"ha-row-left"},
-        width = "auto",
-        height = "auto",
-        flow = "horizontal",
-        halign = "left",
-        valign = "center",
-    },
-    {
-        selectors = {"ha-row-right"},
-        width = "auto",
-        height = "auto",
-        flow = "horizontal",
-        halign = "right",
-        valign = "center",
-    },
-    {
-        selectors = {"ha-tool-button"},
-        width = 14,
-        height = 14,
-        halign = "left",
-        valign = "center",
-        hmargin = 3,
-    },
     {
         selectors = {"ha-section"},
         width = "100%",

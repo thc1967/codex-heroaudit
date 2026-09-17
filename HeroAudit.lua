@@ -567,7 +567,7 @@ end
 --- @param hero character The hero to audit.
 --- @return table names Array of skill names, possibly empty.
 function HeroAudit.GetSkillNames(hero)
-    return HAHeroData.GetSkillNames(hero)
+    return THCUtils.GetSkillNames(hero)
 end
 
 --- Return the alphabetically-sorted names of every language the hero knows,
@@ -575,7 +575,7 @@ end
 --- @param hero character The hero to audit.
 --- @return table names Array of language names, possibly empty.
 function HeroAudit.GetLanguageNames(hero)
-    return HAHeroData.GetLanguageNames(hero, true)
+    return THCUtils.GetLanguageNames(hero, true)
 end
 
 
